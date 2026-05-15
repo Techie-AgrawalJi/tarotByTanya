@@ -260,28 +260,32 @@ export function Reviews() {
         <p className="mx-auto max-w-2xl text-foreground/60 text-base leading-relaxed">
           Share your reading experience with text, chat screenshots, or both. Your review helps future clients feel confident about their session.
         </p>
-        {/* Mobile: Stacked review cards */}
-        <div className="lg:hidden mx-auto px-4 mt-8 w-full">
+        {/* Mobile: Floating marquee with compact cards */}
+        <div className="lg:hidden mx-auto mt-8 w-full">
           {reviews.length > 0 ? (
-            <div className="space-y-4">
-              {reviews.slice(0, 3).map((r) => (
-                <div key={r.id} className="p-4 rounded-xl backdrop-blur-md bg-white/[0.04] border border-primary/15">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h4 className="text-sm font-normal text-white">{r.name}</h4>
-                      <p className="text-xs text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
+            <div className="marquee">
+              <div className="marquee-track">
+                {[...reviews, ...reviews].map((r, idx) => (
+                  <div key={`${r.id}-mobile-${idx}`} className="min-w-[230px] max-w-[250px] p-4 rounded-xl backdrop-blur-md bg-white/[0.04] border border-primary/15">
+                    <div className="flex items-start justify-between mb-2 gap-2">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-normal text-white truncate">{r.name}</h4>
+                        <p className="text-[11px] text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
+                      </div>
+                      <div className="flex gap-0.5 shrink-0">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Star key={i} className={`w-3 h-3 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map(i => <Star key={i} className={`w-3.5 h-3.5 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />)}
-                    </div>
+                    {r.reviewText ? <p className="text-xs leading-normal text-foreground/70 mb-2 line-clamp-4">{r.reviewText}</p> : null}
+                    {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-20 object-cover rounded" /> : null}
                   </div>
-                  {r.reviewText ? <p className="text-xs leading-normal text-foreground/70 mb-2">{r.reviewText}</p> : null}
-                  {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-24 object-cover rounded" /> : null}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : (
-            <div className="px-4 py-6 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
+            <div className="mx-4 px-4 py-6 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
           )}
         </div>
 
