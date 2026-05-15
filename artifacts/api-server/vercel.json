@@ -1,19 +1,17 @@
 {
-  "version": 2,
-  "functions": {
-    "api/index.mjs": {
-      "runtime": "@vercel/node@3.2.10",
-      "maxDuration": 30,
-      "includeFiles": [
-        "dist/**",
-        "artifacts/api-server/dist/**"
-      ]
-    }
-  },
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.mjs"
-    }
-  ]
-}
+    "version": 2,
+    "buildCommand": "npm run build",
+    "functions": {
+      "api/index.mjs": {
+        "runtime": "@vercel/node@3.2.10",
+        "maxDuration": 30,
+        "includeFiles": "dist/**"
+      }
+    },
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "/api/index.mjs"
+      }
+    ]
+  }
