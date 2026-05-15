@@ -58,15 +58,15 @@ export function Pricing() {
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Choose Your Session</h2>
             <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
           </div>
-          <h3 className="heading-luxury text-5xl md:text-6xl text-white">Investment in Clarity</h3>
+          <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Investment in Clarity</h3>
         </motion.div>
 
-        <div className="flex justify-center gap-4 mb-12">
+        <div className="flex justify-center gap-2 md:gap-4 mb-12 flex-wrap">
           {tabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab.toLowerCase())}
-              className={`px-6 py-2 rounded-full font-bold tracking-wider uppercase text-sm transition-all duration-300 ${
+              className={`px-3 md:px-6 py-2 rounded-full font-bold tracking-wider uppercase text-xs md:text-sm transition-all duration-300 ${
                 activeTab === tab.toLowerCase() 
                   ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(201,168,76,0.4)]" 
                   : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"

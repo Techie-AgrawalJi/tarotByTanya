@@ -48,7 +48,7 @@ export function Testimonials() {
           <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Whispers of the Stars</h2>
           <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
         </div>
-        <h3 className="heading-luxury text-5xl md:text-6xl text-white">Guided Souls</h3>
+        <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Guided Souls</h3>
       </div>
 
       <div className="relative flex w-full">
@@ -59,7 +59,7 @@ export function Testimonials() {
           style={{ width: "fit-content" }}
         >
           {[...items, ...items, ...items].map((t, i) => (
-            <div key={i} className="glass-card rounded-2xl p-8 w-[350px] flex-shrink-0 border border-white/5 glowing-border">
+            <div key={i} className="glass-card rounded-2xl p-8 w-[280px] sm:w-[350px] flex-shrink-0 border border-white/5 glowing-border">
               <div className="flex gap-1 mb-6">
                 {[1,2,3,4,5].map(star => (
                   <Star key={star} className={`w-5 h-5 ${star <= t.rating ? "fill-primary text-primary" : "text-white/20"}`} />

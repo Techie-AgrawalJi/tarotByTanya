@@ -16,7 +16,7 @@ export function About() {
         .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }
       `}</style>
       <div className="container mx-auto max-w-6xl">
-        <div className="grid md:grid-cols-2 gap-12 md:gap-24 items-center">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 lg:gap-24 items-center">
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -60,9 +60,9 @@ export function About() {
               <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Meet Your Guide</h2>
               <div className="h-px w-16 bg-gradient-to-r from-primary via-primary to-transparent"></div>
             </div>
-            <h3 className="heading-luxury text-5xl md:text-6xl text-white mb-6">A Beacon in the Cosmic Dark</h3>
+            <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">A Beacon in the Cosmic Dark</h3>
 
-            <div className="space-y-6 text-lg text-foreground/80 font-light leading-relaxed">
+            <div className="space-y-6 text-sm sm:text-base md:text-lg text-foreground/80 font-light leading-relaxed">
               <p>
                 As an experienced spiritual guide with over 15 years of
                 practice, I've dedicated my life to interpreting the intricate

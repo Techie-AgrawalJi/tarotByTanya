@@ -11,7 +11,7 @@ export function Hero() {
     <section 
       id="hero"
       data-testid="hero-section"
-      className="min-h-screen flex flex-col justify-center items-center relative pt-20 px-4 overflow-hidden"
+      className="min-h-screen flex flex-col justify-center items-center relative pt-16 sm:pt-20 px-4 overflow-hidden"
     >
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[800px] max-h-[800px] opacity-20 pointer-events-none">
         <motion.img 
@@ -35,25 +35,25 @@ export function Hero() {
           <span>Discover Your Cosmic Path</span>
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-serif font-bold text-white mb-6 leading-tight drop-shadow-lg">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-serif font-bold text-white mb-6 leading-tight drop-shadow-lg">
           Unlock the Secrets the Universe Has Written for You
         </h1>
         
-        <p className="text-lg md:text-xl text-foreground/90 max-w-2xl mx-auto mb-12 font-light leading-relaxed">
+        <p className="text-base sm:text-lg md:text-xl text-foreground/90 max-w-2xl mx-auto mb-12 font-light leading-relaxed">
           Expert Astrology, Numerology & Tarot Readings — Personalized for Your Journey
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <button 
             onClick={() => scrollTo('booking')}
-            className="w-full sm:w-auto px-8 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-wider hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.4)] hover:shadow-[0_0_30px_rgba(255,255,255,0.6)]"
+            className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-wider text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.4)] hover:shadow-[0_0_30px_rgba(255,255,255,0.6)]"
           >
             Book a Session
           </button>
           
           <button 
             onClick={() => scrollTo('services')}
-            className="w-full sm:w-auto px-8 py-4 border border-white/20 text-white rounded-full font-bold uppercase tracking-wider hover:bg-white/10 transition-all duration-300"
+            className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border border-white/20 text-white rounded-full font-bold uppercase tracking-wider text-sm sm:text-base hover:bg-white/10 transition-all duration-300"
           >
             Explore Services
           </button>

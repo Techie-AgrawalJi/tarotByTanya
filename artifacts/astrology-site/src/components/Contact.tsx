@@ -36,7 +36,7 @@ export function Contact() {
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Get in Touch</h2>
             <div className="h-px w-16 mx-auto bg-gradient-to-r from-primary via-primary to-transparent"></div>
           </div>
-          <h2 className="heading-luxury text-5xl md:text-6xl text-white mb-10">Reach Across the Void</h2>
+          <h2 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-10">Reach Across the Void</h2>
           
           <div className="grid md:grid-cols-2 gap-12 text-left mb-12">
             <div className="space-y-8">

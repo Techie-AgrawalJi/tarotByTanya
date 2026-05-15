@@ -92,7 +92,7 @@ export function Booking() {
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Schedule Your Reading</h2>
             <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
           </div>
-          <h3 className="heading-luxury text-5xl md:text-6xl text-white">Open the Portal</h3>
+          <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Open the Portal</h3>
         </motion.div>
 
         <motion.div 
@@ -220,20 +220,20 @@ export function Booking() {
             <div className="pt-6 border-t border-white/10">
               <p className="text-xs font-bold uppercase tracking-widest text-foreground/60 mb-4 text-center">Payment Method</p>
               <div className="bg-white/5 border border-primary/30 rounded-2xl p-5 mb-6">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
                     <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
                       <span className="text-primary font-bold text-lg">₹</span>
                     </div>
-                    <div className="text-left">
+                    <div className="text-left min-w-0">
                       <p className="text-xs text-foreground/60 font-bold uppercase tracking-wider mb-1">UPI Payment (GPay / PhonePe / Paytm)</p>
-                      <p className="text-white font-bold text-lg tracking-wider">{UPI_ID}</p>
+                      <p className="text-white font-bold text-base sm:text-lg tracking-wider break-all">{UPI_ID}</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={copyUPI}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-primary/50 text-primary text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all duration-300 flex-shrink-0"
+                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-primary/50 text-primary text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all duration-300 flex-shrink-0 w-full sm:w-auto justify-center"
                   >
                     {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {copied ? "Copied!" : "Copy UPI"}
@@ -250,7 +250,7 @@ export function Booking() {
                 type="submit"
                 disabled={isSubmitting}
                 data-testid="button-submit"
-                className="w-full md:w-auto px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                className="w-full px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">

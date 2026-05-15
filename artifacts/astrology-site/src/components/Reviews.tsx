@@ -256,13 +256,38 @@ export function Reviews() {
           <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Client Reviews</h2>
           <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
         </div>
-        <h3 className="heading-luxury text-5xl md:text-6xl text-white mb-6">Words After the Reading</h3>
+        <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">Words After the Reading</h3>
         <p className="mx-auto max-w-2xl text-foreground/60 text-base leading-relaxed">
           Share your reading experience with text, chat screenshots, or both. Your review helps future clients feel confident about their session.
         </p>
-        {/* Floating marquee of reviews (only visible on large screens with 3+ reviews) */}
-        {reviews.length >= 3 ? (
-          <div className="hidden lg:block mx-auto px-4 mt-8 w-full">
+        {/* Mobile: Stacked review cards */}
+        <div className="lg:hidden mx-auto px-4 mt-8 w-full">
+          {reviews.length > 0 ? (
+            <div className="space-y-4">
+              {reviews.slice(0, 3).map((r) => (
+                <div key={r.id} className="p-4 rounded-xl backdrop-blur-md bg-white/[0.04] border border-primary/15">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="text-sm font-normal text-white">{r.name}</h4>
+                      <p className="text-xs text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
+                    </div>
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map(i => <Star key={i} className={`w-3.5 h-3.5 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />)}
+                    </div>
+                  </div>
+                  {r.reviewText ? <p className="text-xs leading-normal text-foreground/70 mb-2">{r.reviewText}</p> : null}
+                  {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-24 object-cover rounded" /> : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="px-4 py-6 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
+          )}
+        </div>
+
+        {/* Desktop: Floating marquee of reviews (only visible on large screens with 3+ reviews) */}
+        <div className="hidden lg:block mx-auto px-4 mt-8 w-full">
+          {reviews.length >= 3 ? (
             <div className="marquee">
               <div className="marquee-track">
                 {[...reviews, ...reviews].map((r, idx) => (
@@ -282,10 +307,7 @@ export function Reviews() {
                 ))}
               </div>
             </div>
-          </div>
-        ) : reviews.length > 0 ? (
-          // Centered static display for less than 3 reviews
-          <div className="hidden lg:block mx-auto px-4 mt-8 w-full">
+          ) : reviews.length > 0 ? (
             <div className="mx-auto max-w-fit flex flex-wrap justify-center gap-6">
               {reviews.map((r) => (
                 <div key={r.id} className="w-[360px] p-6 rounded-2xl backdrop-blur-md bg-white/[0.04] border border-primary/15 transform transition-transform hover:scale-105">
@@ -303,14 +325,12 @@ export function Reviews() {
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="hidden lg:block mx-auto px-4 mt-8 w-full">
+          ) : (
             <div className="mx-auto max-w-fit">
               <div className="px-6 py-8 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60">No reviews yet</div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="mx-auto px-4 grid gap-0 lg:gap-8 lg:grid-cols-12 items-start max-w-5xl">

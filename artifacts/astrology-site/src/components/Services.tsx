@@ -51,7 +51,7 @@ export function Services() {
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Our Sacred Readings</h2>
             <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
           </div>
-          <h3 className="heading-luxury text-5xl md:text-6xl text-white">Illuminate Your Path</h3>
+          <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Illuminate Your Path</h3>
         </motion.div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
