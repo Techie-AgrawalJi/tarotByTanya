@@ -1,5 +1,4 @@
 {
-  "rootDirectory": "artifacts/astrology-site",
   "installCommand": "npm ci --workspaces",
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
