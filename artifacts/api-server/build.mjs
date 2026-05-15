@@ -9,10 +9,11 @@ import { rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const bundleDir = path.resolve(artifactDir, "api", "_bundle");
 
 async function buildAll() {
-  const distDir = path.resolve(artifactDir, "dist");
-  await rm(distDir, { recursive: true, force: true });
+  await rm(bundleDir, { recursive: true, force: true });
+  await rm(path.resolve(artifactDir, "dist"), { recursive: true, force: true });
 
   await esbuild({
     entryPoints: [
@@ -22,7 +23,7 @@ async function buildAll() {
     platform: "node",
     bundle: true,
     format: "cjs",
-    outdir: distDir,
+    outdir: bundleDir,
     outExtension: { ".js": ".cjs" },
     logLevel: "info",
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.

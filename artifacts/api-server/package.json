@@ -7,9 +7,9 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "npm run build && node --enable-source-maps ./dist/index.cjs",
+    "dev": "npm run build && node --enable-source-maps ./api/index.mjs",
     "build": "node ./build.mjs",
-    "start": "node --enable-source-maps ./dist/index.cjs",
+    "start": "node --enable-source-maps ./api/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

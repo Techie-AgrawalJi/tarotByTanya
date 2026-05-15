@@ -4,8 +4,7 @@
     "functions": {
       "api/index.mjs": {
         "runtime": "@vercel/node@3.2.10",
-        "maxDuration": 30,
-        "includeFiles": "dist/**"
+        "maxDuration": 30
       }
     },
     "routes": [
