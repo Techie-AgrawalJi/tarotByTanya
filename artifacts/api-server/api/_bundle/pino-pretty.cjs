@@ -426,8 +426,8 @@ var require_split2 = __commonJS({
     "use strict";
     var { Transform: Transform2 } = require("stream");
     var { StringDecoder } = require("string_decoder");
-    var kLast = Symbol("last");
-    var kDecoder = Symbol("decoder");
+    var kLast = /* @__PURE__ */ Symbol("last");
+    var kDecoder = /* @__PURE__ */ Symbol("decoder");
     function transform(chunk, enc, cb) {
       let list;
       if (this.overflow) {
@@ -525,7 +525,7 @@ var require_split2 = __commonJS({
 var require_pino_abstract_transport = __commonJS({
   "../../node_modules/pino-pretty/node_modules/pino-abstract-transport/index.js"(exports2, module2) {
     "use strict";
-    var metadata = Symbol.for("pino.metadata");
+    var metadata = /* @__PURE__ */ Symbol.for("pino.metadata");
     var split = require_split2();
     var { Duplex } = require("stream");
     var { parentPort, workerData } = require("worker_threads");
@@ -1965,7 +1965,7 @@ var require_dateformat = __commonJS({
     }
     (function(global2) {
       var _arguments = arguments;
-      var dateFormat = /* @__PURE__ */ function() {
+      var dateFormat = /* @__PURE__ */ (function() {
         var token = /d{1,4}|D{3,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|W{1,2}|[LlopSZN]|"[^"]*"|'[^']*'/g;
         var timezone = /\b(?:[PMCEA][SDP]T|(?:Pacific|Mountain|Central|Eastern|Atlantic) (?:Standard|Daylight|Prevailing) Time|(?:GMT|UTC)(?:[-+]\d{4})?)\b/g;
         var timezoneClip = /[^-+\dA-Z]/g;
@@ -2100,7 +2100,7 @@ var require_dateformat = __commonJS({
             return match.slice(1, match.length - 1);
           });
         };
-      }();
+      })();
       dateFormat.masks = { default: "ddd mmm dd yyyy HH:MM:ss", shortDate: "m/d/yy", paddedShortDate: "mm/dd/yyyy", mediumDate: "mmm d, yyyy", longDate: "mmmm d, yyyy", fullDate: "dddd, mmmm d, yyyy", shortTime: "h:MM TT", mediumTime: "h:MM:ss TT", longTime: "h:MM:ss TT Z", isoDate: "yyyy-mm-dd", isoTime: "HH:MM:ss", isoDateTime: "yyyy-mm-dd'T'HH:MM:sso", isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'", expiresHeaderFormat: "ddd, dd mmm yyyy HH:MM:ss Z" };
       dateFormat.i18n = { dayNames: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], monthNames: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], timeNames: ["a", "p", "am", "pm", "A", "P", "AM", "PM"] };
       var pad = function pad2(val, len) {

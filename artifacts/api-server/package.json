@@ -3,21 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": "20.x"
-  },
   "scripts": {
-    "dev": "npm run build && node --enable-source-maps ./api/index.mjs",
+    "dev": "npm run build && node --enable-source-maps ./dist/index.cjs",
     "build": "node ./build.mjs",
-    "start": "node --enable-source-maps ./api/index.mjs",
+    "start": "node --enable-source-maps ./dist/index.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@types/multer": "^2.1.0",
     "@workspace/api-zod": "*",
     "@workspace/db": "*",
-    "esbuild": "^0.25.8",
-    "esbuild-plugin-pino": "^2.3.3",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
@@ -34,7 +29,8 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.3",
-    "typescript": "~5.9.2",
+    "esbuild": "^0.27.3",
+    "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
     "thread-stream": "3.1.0"
   }
