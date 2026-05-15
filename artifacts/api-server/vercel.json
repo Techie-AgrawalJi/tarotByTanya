@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "api/index.ts": {
+    "api/index.mjs": {
       "runtime": "@vercel/node@3.2.10",
       "maxDuration": 30
     }
@@ -9,7 +9,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/api/index.mjs"
     }
   ]
 }
