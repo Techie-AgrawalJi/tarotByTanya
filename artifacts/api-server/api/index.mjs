@@ -7,7 +7,7 @@ async function getHandler() {
     return cachedHandler;
   }
 
-  const appModule = await import("../dist/app.mjs");
+  const appModule = await import("../dist/app.cjs");
   cachedHandler = appModule.default;
   return cachedHandler;
 }
