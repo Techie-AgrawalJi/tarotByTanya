@@ -7,6 +7,7 @@ import { Sparkles, CheckCircle2, X, Copy, CheckCheck } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
+  phone: z.string().min(10, "Valid WhatsApp number required"),
   service: z.string().min(1, "Please select a service"),
   duration: z.string().min(1, "Please select a duration"),
   date: z.string().min(1, "Please select a date"),
@@ -150,6 +151,19 @@ export function Booking() {
                   placeholder="Jane Doe"
                 />
                 {errors.name && <p className="text-destructive text-sm mt-1">{errors.name.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">WhatsApp Number</label>
+                <input 
+                  {...register("phone")}
+                  type="tel"
+                  inputMode="tel"
+                  data-testid="input-phone"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="+91 98765 43210"
+                />
+                {errors.phone && <p className="text-destructive text-sm mt-1">{errors.phone.message}</p>}
               </div>
               
               <div className="space-y-2">
