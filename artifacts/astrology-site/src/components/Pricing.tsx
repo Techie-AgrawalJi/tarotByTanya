@@ -42,7 +42,7 @@ export function Pricing() {
   const durations = durationsByTab[activeTab] ?? durationsByTab["astrology"];
 
   return (
-    <section id="pricing" data-testid="pricing-section" className="py-24 px-4 relative z-10 bg-[#0a0a1a]/50">
+    <section id="pricing" data-testid="pricing-section" className="py-12 md:py-24 px-4 relative z-10 bg-[#0a0a1a]/50">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
         .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }

@@ -34,7 +34,7 @@ export function Services() {
     <section 
       id="services" 
       data-testid="services-section"
-      className="py-24 px-4 relative z-10"
+      className="py-12 md:py-24 px-4 relative z-10"
     >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');

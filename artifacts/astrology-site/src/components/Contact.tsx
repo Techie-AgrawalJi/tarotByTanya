@@ -8,7 +8,7 @@ export function Contact() {
     .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }
   `;
   return (
-    <section id="contact" data-testid="contact-section" className="py-24 relative z-10">
+    <section id="contact" data-testid="contact-section" className="py-12 md:py-24 relative z-10">
       <style>{styleTag}</style>
       {/* Moon phase divider */}
       <div className="container mx-auto px-4 flex justify-center items-center gap-4 mb-20 opacity-50">

@@ -4,8 +4,7 @@
   "license": "MIT",
   "workspaces": [
     "artifacts/*",
-    "lib/*",
-    "scripts"
+    "lib/*"
   ],
   "scripts": {
     "build": "npm run typecheck && npm run build --workspaces --if-present",

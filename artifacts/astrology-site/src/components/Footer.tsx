@@ -7,7 +7,7 @@ export function Footer() {
   };
 
   return (
-    <footer data-testid="footer" className="bg-[#05050f] border-t border-white/5 py-12 px-4 relative z-10">
+    <footer data-testid="footer" className="bg-[#05050f] border-t border-white/5 py-8 md:py-12 px-4 relative z-10">
       <div className="container mx-auto max-w-6xl flex flex-col md:flex-row justify-between items-center gap-8">
         <div className="text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-2 text-primary font-serif font-bold text-2xl mb-2 cursor-pointer" onClick={() => scrollTo('hero')}>

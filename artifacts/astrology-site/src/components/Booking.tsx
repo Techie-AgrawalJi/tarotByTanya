@@ -80,7 +80,7 @@ export function Booking() {
   };
 
   return (
-    <section id="booking" data-testid="booking-section" className="py-24 px-4 relative z-10">
+    <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
       <div className="container mx-auto max-w-4xl">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}

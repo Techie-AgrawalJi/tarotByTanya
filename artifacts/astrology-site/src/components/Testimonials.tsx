@@ -41,7 +41,7 @@ export function Testimonials() {
   ];
 
   return (
-    <section id="testimonials" data-testid="testimonials-section" className="py-24 overflow-hidden relative z-10">
+    <section id="testimonials" data-testid="testimonials-section" className="py-12 md:py-24 overflow-hidden relative z-10">
       <style>{styleTag}</style>
       <div className="container mx-auto px-4 mb-16 text-center">
         <div className="mb-6 inline-block">

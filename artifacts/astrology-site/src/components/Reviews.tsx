@@ -2,6 +2,12 @@ import { motion } from "framer-motion";
 import { Star, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { format } from "date-fns";
+import {
+  formatReviewCount,
+  readCachedReviews,
+  REVIEW_COUNT_UPDATED_EVENT,
+  writeCachedReviews,
+} from "@/lib/review-count";
 
 type ReviewImage = {
   id: string;
@@ -47,8 +53,13 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function Reviews() {
-  const [reviews, setReviews] = useState<ReviewRecord[]>([]);
-  const [summary, setSummary] = useState({ totalReviews: 0, averageRating: 0 });
+  const cachedReviews = readCachedReviews();
+  const [reviews, setReviews] = useState<ReviewRecord[]>(() =>
+    Array.isArray(cachedReviews?.reviews) ? (cachedReviews.reviews as ReviewRecord[]) : [],
+  );
+  const [summary, setSummary] = useState(
+    () => cachedReviews?.summary ?? { totalReviews: 0, averageRating: 0 },
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,6 +128,7 @@ export function Reviews() {
         if (!cancelled) {
           setReviews(data.reviews ?? []);
           setSummary(data.summary ?? { totalReviews: 0, averageRating: 0 });
+          writeCachedReviews({ reviews: data.reviews ?? [], summary: data.summary ?? { totalReviews: 0, averageRating: 0 } });
         }
       } catch (err) {
         if (!cancelled) {
@@ -200,9 +212,10 @@ export function Reviews() {
       const createdReview = payload?.review;
 
       if (createdReview) {
-        setReviews((current) => [createdReview, ...current]);
-        setSummary((current) => {
-          const prev = current ?? { totalReviews: 0, averageRating: 0 };
+        const nextTotalReviews = (summary.totalReviews ?? 0) + 1;
+        const nextReviews = [createdReview, ...reviews];
+        const nextSummary = (() => {
+          const prev = summary ?? { totalReviews: 0, averageRating: 0 };
           const total = (prev.totalReviews ?? 0) + 1;
           const avg = Number(
             ((((prev.averageRating ?? 0) * (prev.totalReviews ?? 0)) + (createdReview.rating ?? 0)) /
@@ -210,7 +223,16 @@ export function Reviews() {
           );
 
           return { totalReviews: total, averageRating: avg };
-        });
+        })();
+
+        setReviews(nextReviews);
+        setSummary(nextSummary);
+        writeCachedReviews({ reviews: nextReviews, summary: nextSummary });
+        window.dispatchEvent(
+          new CustomEvent(REVIEW_COUNT_UPDATED_EVENT, {
+            detail: { totalReviews: nextTotalReviews },
+          }),
+        );
       } else {
         throw new Error("Failed to submit review.");
       }
@@ -230,7 +252,7 @@ export function Reviews() {
   }
 
   return (
-    <section id="reviews" data-testid="reviews-section" className="py-32 overflow-hidden relative z-10">
+    <section id="reviews" data-testid="reviews-section" className="py-16 md:py-32 overflow-hidden relative z-10">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
         .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }
@@ -254,7 +276,7 @@ export function Reviews() {
       <div className="mx-auto px-4 mb-16 text-center max-w-5xl">
         <div className="mb-6 inline-block">
           <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Client Reviews</h2>
-          <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+          <div className="h-px bg-linear-to-r from-transparent via-primary to-transparent"></div>
         </div>
         <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">Words After the Reading</h3>
         <p className="mx-auto max-w-2xl text-foreground/60 text-base leading-relaxed">
@@ -266,7 +288,7 @@ export function Reviews() {
             <div className="marquee">
               <div className="marquee-track">
                 {[...reviews, ...reviews].map((r, idx) => (
-                  <div key={`${r.id}-mobile-${idx}`} className="min-w-[230px] max-w-[250px] p-4 rounded-xl backdrop-blur-md bg-white/[0.04] border border-primary/15">
+                  <div key={`${r.id}-mobile-${idx}`} className="min-w-57.5 max-w-62.5 p-4 rounded-xl backdrop-blur-md bg-white/4 border border-primary/15">
                     <div className="flex items-start justify-between mb-2 gap-2">
                       <div className="min-w-0">
                         <h4 className="text-sm font-normal text-white truncate">{r.name}</h4>
@@ -285,7 +307,7 @@ export function Reviews() {
               </div>
             </div>
           ) : (
-            <div className="mx-4 px-4 py-6 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
+            <div className="mx-4 px-4 py-6 rounded-lg backdrop-blur-md bg-white/2 border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
           )}
         </div>
 
@@ -295,7 +317,7 @@ export function Reviews() {
             <div className="marquee">
               <div className="marquee-track">
                 {[...reviews, ...reviews].map((r, idx) => (
-                  <div key={`${r.id}-${idx}`} className="min-w-[360px] max-w-[420px] p-6 rounded-2xl backdrop-blur-md bg-white/[0.04] border border-primary/15 transform transition-transform hover:scale-105">
+                  <div key={`${r.id}-${idx}`} className="min-w-90 max-w-105 p-6 rounded-2xl backdrop-blur-md bg-white/4 border border-primary/15 transform transition-transform hover:scale-105">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h4 className="text-base font-normal text-white">{r.name}</h4>
@@ -314,7 +336,7 @@ export function Reviews() {
           ) : reviews.length > 0 ? (
             <div className="mx-auto max-w-fit flex flex-wrap justify-center gap-6">
               {reviews.map((r) => (
-                <div key={r.id} className="w-[360px] p-6 rounded-2xl backdrop-blur-md bg-white/[0.04] border border-primary/15 transform transition-transform hover:scale-105">
+                <div key={r.id} className="w-90 p-6 rounded-2xl backdrop-blur-md bg-white/4 border border-primary/15 transform transition-transform hover:scale-105">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h4 className="text-base font-normal text-white">{r.name}</h4>
@@ -331,7 +353,7 @@ export function Reviews() {
             </div>
           ) : (
             <div className="mx-auto max-w-fit">
-              <div className="px-6 py-8 rounded-lg backdrop-blur-md bg-white/[0.02] border border-primary/15 text-foreground/60">No reviews yet</div>
+              <div className="px-6 py-8 rounded-lg backdrop-blur-md bg-white/2 border border-primary/15 text-foreground/60">No reviews yet</div>
             </div>
           )}
         </div>
@@ -344,7 +366,7 @@ export function Reviews() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6 }}
-          className="lg:col-span-7 lg:border-r lg:border-primary/20 lg:pr-8 backdrop-blur-sm bg-white/[0.04] rounded-lg p-6 md:p-8"
+          className="lg:col-span-7 lg:border-r lg:border-primary/20 lg:pr-8 backdrop-blur-sm bg-white/4 rounded-lg p-6 md:p-8"
         >
           <form className="space-y-8" onSubmit={handleSubmit}>
             <div className="grid gap-8 md:grid-cols-2">
@@ -453,12 +475,12 @@ export function Reviews() {
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative backdrop-blur-md bg-white/[0.02] border border-primary/20 rounded-lg p-6 group hover:bg-white/[0.05] transition-colors"
+            className="relative backdrop-blur-md bg-white/2 border border-primary/20 rounded-lg p-6 group hover:bg-white/5 transition-colors"
           >
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+            <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary to-transparent"></div>
             <div>
               <div className="text-xs font-light uppercase tracking-widest text-primary/70 mb-2">Total Reviews</div>
-              <div className="heading-luxury text-4xl text-white">{summary.totalReviews}</div>
+                <div className="heading-luxury text-4xl text-white">{formatReviewCount(summary.totalReviews)}</div>
             </div>
             <div className="mt-6 pt-6 border-t border-primary/10">
               <div className="flex items-center justify-between mb-3">
@@ -478,7 +500,7 @@ export function Reviews() {
                     <div key={stars} className="flex items-center gap-2">
                       <span className="text-xs text-primary/60 w-4">{stars}★</span>
                       <div className="flex-1 h-1.5 bg-primary/10 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full" style={{ width: `${pct}%` }}></div>
+                        <div className="h-full bg-linear-to-r from-primary to-primary/70 rounded-full" style={{ width: `${pct}%` }}></div>
                       </div>
                     </div>
                   );
