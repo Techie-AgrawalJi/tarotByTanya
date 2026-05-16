@@ -131,15 +131,14 @@ export function About() {
             <div className="space-y-6 text-sm sm:text-base md:text-lg text-foreground/80 font-light leading-relaxed">
               <p>
                 As an experienced spiritual guide with over 5 years of
-                practice, I've dedicated my life to interpreting the intricate
-                language of the stars, numbers, and cards.
+                practice, I've dedicated my life to the art of tarot reading,
+                spell casting, energy healing, and manifestation rituals.
               </p>
               <p>
-                My mission is to help souls navigate their earthly journey by
-                unlocking the cosmic wisdom written in their very being. Whether
-                you're seeking clarity in your career, navigating complex
-                relationships, or searching for your true life purpose, the
-                universe always has an answer.
+                My mission is to help souls unlock their true potential and navigate
+                their earthly journey by connecting with spiritual wisdom and cosmic energy.
+                Whether you're seeking clarity on relationships, career guidance, spiritual
+                healing, or wish to align with manifestation energy, I'm here to guide you.
               </p>
             </div>
 
@@ -153,12 +152,8 @@ export function About() {
                 </div>
               </div>
               <div>
-                <div className="text-3xl font-serif font-bold text-white mb-2">
-                    {formatReviewCount(reviewCount)}
-                </div>
-                <div className="text-sm uppercase tracking-wider text-primary">
-                    Reviews
-                </div>
+                <div className="text-3xl font-serif font-bold text-white mb-2">{formatReviewCount(reviewCount)}</div>
+                <div className="text-sm uppercase tracking-wider text-primary">Total Reviews</div>
               </div>
             </div>
           </motion.div>

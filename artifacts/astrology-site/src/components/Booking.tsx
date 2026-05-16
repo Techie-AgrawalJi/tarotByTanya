@@ -7,8 +7,6 @@ import { Sparkles, CheckCircle2, X, Copy, CheckCheck } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  phone: z.string().min(10, "Valid phone number required"),
-  email: z.string().email("Invalid email address"),
   service: z.string().min(1, "Please select a service"),
   duration: z.string().min(1, "Please select a duration"),
   date: z.string().min(1, "Please select a date"),
@@ -19,6 +17,33 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 const UPI_ID = "7877082223@upi";
+
+const servicePackages: Record<string, { time: string; price: string }[]> = {
+  tarot: [
+    { time: "10 Minutes", price: "₹199" },
+    { time: "15 Minutes", price: "₹249" },
+    { time: "30 Minutes", price: "₹499" },
+    { time: "1 Hour", price: "₹899" },
+  ],
+  "spell casting & healer": [
+    { time: "Consultation", price: "₹699" },
+    { time: "Basic Spell", price: "₹1,499" },
+    { time: "Healing Session", price: "₹1,999" },
+    { time: "Premium Package", price: "₹3,499" },
+  ],
+  "manifestation rituals": [
+    { time: "Single Ritual", price: "₹799" },
+    { time: "30-Day Program", price: "₹2,499" },
+    { time: "Quarterly Plan", price: "₹5,999" },
+    { time: "Annual Alignment", price: "₹9,999" },
+  ],
+  "face reading & name": [
+    { time: "Face Reading", price: "₹699" },
+    { time: "Name Analysis", price: "₹999" },
+    { time: "Combined Reading", price: "₹1,799" },
+    { time: "Premium Report", price: "₹2,999" },
+  ],
+};
 
 function scrollToSection(id: string): void {
   const element = document.getElementById(id);
@@ -33,6 +58,7 @@ export function Booking() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [selectedService, setSelectedService] = useState("");
 
   const styleTag = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
@@ -45,9 +71,11 @@ export function Booking() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<FormData>({
     resolver: zodResolver(formSchema)
   });
+
+  const watchedService = watch("service");
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
@@ -68,6 +96,7 @@ export function Booking() {
         setSubmittedName(data.name);
         setShowSuccess(true);
         reset();
+        setSelectedService("");
       } else {
         alert("There was a problem submitting your request. Please try again.");
       }
@@ -78,6 +107,12 @@ export function Booking() {
       setIsSubmitting(false);
     }
   };
+
+  const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedService(e.target.value);
+  };
+
+  const currentPackages = watchedService ? servicePackages[watchedService.toLowerCase()] : [];
 
   return (
     <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
@@ -118,41 +153,18 @@ export function Booking() {
               </div>
               
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Phone Number</label>
-                <input 
-                  {...register("phone")}
-                  type="tel"
-                  data-testid="input-phone"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="+91 98765 43210"
-                />
-                {errors.phone && <p className="text-destructive text-sm mt-1">{errors.phone.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Email Address</label>
-                <input 
-                  {...register("email")}
-                  type="email"
-                  data-testid="input-email"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="jane@example.com"
-                />
-                {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
-              </div>
-
-              <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Service Type</label>
                 <select 
                   {...register("service")}
+                  onChange={handleServiceChange}
                   data-testid="select-service"
                   className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
                 >
                   <option value="">Select a service...</option>
-                  <option value="Astrology">Astrology Reading</option>
-                  <option value="Numerology">Numerology Reading</option>
                   <option value="Tarot">Tarot Reading</option>
-                  <option value="Name Numerology Correction">Name Numerology Correction</option>
+                  <option value="Spell Casting & Healer">Spell Casting & Healer</option>
+                  <option value="Manifestation Rituals">Manifestation Rituals</option>
+                  <option value="Face Reading & Name">Face Reading & Name Correction</option>
                 </select>
                 {errors.service && <p className="text-destructive text-sm mt-1">{errors.service.message}</p>}
               </div>
@@ -162,17 +174,15 @@ export function Booking() {
                 <select 
                   {...register("duration")}
                   data-testid="select-duration"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                  disabled={!selectedService}
+                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">Select duration / package...</option>
-                  <option value="10 Minutes">10 Minutes (₹499)</option>
-                  <option value="15 Minutes">15 Minutes (₹799)</option>
-                  <option value="30 Minutes">30 Minutes (₹1,499)</option>
-                  <option value="1 Hour">1 Hour (₹2,499)</option>
-                  <option value="Name Correction – Basic">Name Correction – Basic (₹699)</option>
-                  <option value="Name Correction – Standard">Name Correction – Standard (₹1,199)</option>
-                  <option value="Name Correction – Detailed Report">Name Correction – Detailed Report (₹1,999)</option>
-                  <option value="Name Correction – Premium">Name Correction – Premium (₹2,999)</option>
+                  {currentPackages.map((pkg) => (
+                    <option key={pkg.time} value={pkg.time}>
+                      {pkg.time} ({pkg.price})
+                    </option>
+                  ))}
                 </select>
                 {errors.duration && <p className="text-destructive text-sm mt-1">{errors.duration.message}</p>}
               </div>
@@ -189,7 +199,7 @@ export function Booking() {
                 {errors.date && <p className="text-destructive text-sm mt-1">{errors.date.message}</p>}
               </div>
 
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Time Slot</label>
                 <select 
                   {...register("timeslot")}
@@ -204,7 +214,7 @@ export function Booking() {
                 {errors.timeslot && <p className="text-destructive text-sm mt-1">{errors.timeslot.message}</p>}
               </div>
 
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>
                 <textarea 
                   {...register("message")}
@@ -250,7 +260,7 @@ export function Booking() {
                 type="submit"
                 disabled={isSubmitting}
                 data-testid="button-submit"
-                className="w-full px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                className="w-full sm:w-auto inline-flex px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed items-center justify-center gap-2 mx-auto"
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">

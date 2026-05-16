@@ -12,7 +12,7 @@ export function Footer() {
         <div className="text-center md:text-left">
           <div className="flex items-center justify-center md:justify-start gap-2 text-primary font-serif font-bold text-2xl mb-2 cursor-pointer" onClick={() => scrollTo('hero')}>
             <Moon className="w-6 h-6" />
-            Celestial Guidance
+            Tarot by Tanya
           </div>
           <div className="text-sm font-light text-foreground/60 uppercase tracking-widest">
             Where Stars Meet Souls
@@ -29,7 +29,7 @@ export function Footer() {
       </div>
       
       <div className="container mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 text-center text-sm font-light text-foreground/40">
-        <p>© 2025 Celestial Guidance · All Rights Reserved · Crafted with ✨ & Stardust</p>
+        <p>© 2026 Celestial Guidance · All Rights Reserved · Crafted with ✨ & Stardust</p>
       </div>
     </footer>
   );

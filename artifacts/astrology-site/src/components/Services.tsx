@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Star, Hash, Layers, Pencil } from "lucide-react";
+import { Wand2, Lightbulb, Eye, Sparkles } from "lucide-react";
 
 export function Services() {
   const scrollTo = (id: string) => {
@@ -9,24 +9,24 @@ export function Services() {
 
   const services = [
     {
-      title: "Astrology Reading",
-      icon: Star,
-      desc: "Birth chart analysis, planetary influences, and profound life path guidance based on the exact moment of your arrival.",
-    },
-    {
-      title: "Numerology Reading",
-      icon: Hash,
-      desc: "Discover your life path number, destiny number, and personal year cycles to understand the mathematical patterns of your life.",
-    },
-    {
       title: "Tarot Reading",
-      icon: Layers,
-      desc: "Past, present, and future spreads offering spiritual insight, clarity on love and career, and actionable guidance.",
+      icon: Sparkles,
+      desc: "Past, present, and future spreads offering spiritual insight, clarity on love and career, and actionable guidance for your journey.",
     },
     {
-      title: "Name Numerology Correction",
-      icon: Pencil,
-      desc: "Your name carries a vibration that shapes your destiny. We analyse your name's numerological value and suggest powerful corrections to align it with your life path for success, harmony, and abundance.",
+      title: "Spell Casting & Healer",
+      icon: Wand2,
+      desc: "Harness the power of intention and energy. Custom spells for protection, abundance, love, and healing tailored to your specific needs.",
+    },
+    {
+      title: "Manifestation Rituals",
+      icon: Lightbulb,
+      desc: "Align with universal abundance through guided rituals and practices designed to amplify your intentions and attract positive energy into your life.",
+    },
+    {
+      title: "Face Reading & Name Correction",
+      icon: Eye,
+      desc: "Discover what your features reveal about your personality and destiny. Includes name vibration analysis and correction suggestions for alignment.",
     },
   ];
 

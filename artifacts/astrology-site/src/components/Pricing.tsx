@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
 export function Pricing() {
-  const [activeTab, setActiveTab] = useState("astrology");
+  const [activeTab, setActiveTab] = useState("tarot");
 
-  const tabs = ["Astrology", "Numerology", "Tarot", "Name Correction"];
+  const tabs = ["Tarot", "Spell Casting & Healer", "Manifestation Rituals", "Face Reading & Name"];
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -13,33 +13,33 @@ export function Pricing() {
   };
 
   const durationsByTab: Record<string, { time: string; price: string; included: string; popular?: boolean }[]> = {
-    astrology: [
-      { time: "10 Minutes", price: "₹499", included: "Quick guidance, 1 focused question" },
-      { time: "15 Minutes", price: "₹799", included: "Targeted reading, brief chart overview" },
-      { time: "30 Minutes", price: "₹1,499", included: "In-depth reading, Q&A included", popular: true },
-      { time: "1 Hour", price: "₹2,499", included: "Full session, detailed report, follow-up" },
-    ],
-    numerology: [
-      { time: "10 Minutes", price: "₹499", included: "Quick guidance, 1 focused question" },
-      { time: "15 Minutes", price: "₹799", included: "Life path overview, key numbers" },
-      { time: "30 Minutes", price: "₹1,499", included: "In-depth reading, Q&A included", popular: true },
-      { time: "1 Hour", price: "₹2,499", included: "Full session, detailed report, follow-up" },
-    ],
     tarot: [
-      { time: "10 Minutes", price: "₹499", included: "Quick guidance, 1 focused question" },
-      { time: "15 Minutes", price: "₹799", included: "3-card spread, brief insight" },
-      { time: "30 Minutes", price: "₹1,499", included: "Full spread, Q&A included", popular: true },
-      { time: "1 Hour", price: "₹2,499", included: "Full session, detailed report, follow-up" },
+      { time: "10 Minutes", price: "₹199", included: "Quick guidance, 1 focused question" },
+      { time: "15 Minutes", price: "₹249", included: "3-card spread, brief insight" },
+      { time: "30 Minutes", price: "₹499", included: "Full spread, Q&A included", popular: true },
+      { time: "1 Hour", price: "₹899", included: "Full session, detailed report, follow-up" },
     ],
-    "name correction": [
-      { time: "Basic Analysis", price: "₹699", included: "Name vibration check, brief report" },
-      { time: "Standard", price: "₹1,199", included: "Name analysis + correction suggestions" },
-      { time: "Detailed Report", price: "₹1,999", included: "Full numerology correction + written report", popular: true },
-      { time: "Premium", price: "₹2,999", included: "Complete report, lucky names list, follow-up session" },
+    "spell casting & healer": [
+      { time: "Consultation", price: "₹699", included: "Initial assessment, spell needs discussion" },
+      { time: "Basic Spell", price: "₹1,499", included: "Single intention spell casting" },
+      { time: "Healing Session", price: "₹1,999", included: "Energy healing + cleansing ritual", popular: true },
+      { time: "Premium Package", price: "₹3,499", included: "Custom spell + healing + follow-up" },
+    ],
+    "manifestation rituals": [
+      { time: "Single Ritual", price: "₹799", included: "One-time manifestation ritual" },
+      { time: "30-Day Program", price: "₹2,499", included: "Daily guidance, weekly rituals", popular: true },
+      { time: "Quarterly Plan", price: "₹5,999", included: "Monthly rituals, personalized practices" },
+      { time: "Annual Alignment", price: "₹9,999", included: "Comprehensive yearly program with support" },
+    ],
+    "face reading & name": [
+      { time: "Face Reading", price: "₹699", included: "Basic face reading analysis" },
+      { time: "Name Analysis", price: "₹999", included: "Name vibration check, suggestions" },
+      { time: "Combined Reading", price: "₹1,799", included: "Face reading + name correction", popular: true },
+      { time: "Premium Report", price: "₹2,999", included: "Complete analysis + written report + follow-up" },
     ],
   };
 
-  const durations = durationsByTab[activeTab] ?? durationsByTab["astrology"];
+  const durations = durationsByTab[activeTab] ?? durationsByTab["tarot"];
 
   return (
     <section id="pricing" data-testid="pricing-section" className="py-12 md:py-24 px-4 relative z-10 bg-[#0a0a1a]/50">
