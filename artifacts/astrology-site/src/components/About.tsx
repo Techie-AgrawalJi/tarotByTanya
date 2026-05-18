@@ -145,7 +145,7 @@ export function About() {
             <div className="grid grid-cols-2 gap-6 mt-12 pt-10 border-t border-white/10">
               <div>
                 <div className="text-3xl font-serif font-bold text-white mb-2">
-                  3,000+
+                  0
                 </div>
                 <div className="text-sm uppercase tracking-wider text-primary">
                   Clients Guided
