@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Moon } from "lucide-react";
+import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -25,9 +26,23 @@ export function Navbar() {
       }`}
     >
       <div className="container mx-auto px-4 md:px-8 flex justify-between items-center">
-        <div className="flex items-center gap-2 text-primary font-serif font-bold text-xl md:text-2xl cursor-pointer" onClick={() => scrollTo('hero')}>
-          <Moon className="w-6 h-6" />
-         TarotByTanya
+        <div className="flex items-center gap-2 text-primary font-serif font-bold text-xl md:text-2xl">
+          <Dialog>
+            <DialogTrigger asChild>
+              <button aria-label="View logo" className="inline-flex p-0">
+                <img src="logo.png" alt="logo" className="h-10 w-10 md:h-12 md:w-12 object-contain" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl p-4">
+              <div className="flex items-center justify-center">
+                <img src="logo.png" alt="logo large" className="max-h-[60vh] max-w-full object-contain" />
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <button onClick={() => scrollTo('hero')} className="ml-2 cursor-pointer text-left">
+            DivineTanyaa
+          </button>
         </div>
         
         <div className="hidden md:flex items-center gap-6 lg:gap-8 text-sm uppercase tracking-widest font-semibold text-foreground/80">
