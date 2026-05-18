@@ -7,25 +7,34 @@ export function Services() {
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };
 
+  const openPricingTab = (tab: string) => {
+    window.dispatchEvent(new CustomEvent("pricing-tab-change", { detail: { tab } }));
+    scrollTo("pricing");
+  };
+
   const services = [
     {
       title: "Tarot Reading",
       icon: Sparkles,
+      pricingTab: "tarot",
       desc: "Past, present, and future spreads offering spiritual insight, clarity on love and career, and actionable guidance for your journey.",
     },
     {
       title: "Spell Casting & Healer",
       icon: Wand2,
+      pricingTab: "spell casting & healer",
       desc: "Harness the power of intention and energy. Custom spells for protection, abundance, love, and healing tailored to your specific needs.",
     },
     {
       title: "Manifestation Rituals",
       icon: Lightbulb,
+      pricingTab: "manifestation rituals",
       desc: "Align with universal abundance through guided rituals and practices designed to amplify your intentions and attract positive energy into your life.",
     },
     {
       title: "Face Reading & Name Correction",
       icon: Eye,
+      pricingTab: "face reading & name",
       desc: "Discover what your features reveal about your personality and destiny. Includes name vibration analysis and correction suggestions for alignment.",
     },
   ];
@@ -49,7 +58,7 @@ export function Services() {
         >
           <div className="mb-6 inline-block">
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Our Sacred Readings</h2>
-            <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+            <div className="h-px bg-linear-to-r from-transparent via-primary to-transparent"></div>
           </div>
           <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Illuminate Your Path</h3>
         </motion.div>
@@ -68,11 +77,11 @@ export function Services() {
                 <svc.icon className="w-8 h-8 text-primary animate-pulse" />
               </div>
               <h4 className="text-2xl font-serif font-bold text-white mb-4">{svc.title}</h4>
-              <p className="text-foreground/80 font-light leading-relaxed mb-8 flex-grow">
+              <p className="text-foreground/80 font-light leading-relaxed mb-8 grow">
                 {svc.desc}
               </p>
               <button 
-                onClick={() => scrollTo('pricing')}
+                onClick={() => openPricingTab(svc.pricingTab)}
                 className="text-sm font-bold uppercase tracking-widest text-primary hover:text-white transition-colors flex items-center gap-2"
               >
                 View Pricing →

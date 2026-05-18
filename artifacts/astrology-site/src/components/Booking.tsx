@@ -1,13 +1,19 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Sparkles, CheckCircle2, X, Copy, CheckCheck } from "lucide-react";
+import { Sparkles, CheckCircle2, X } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(10, "Valid WhatsApp number required"),
+  dob: z.string().min(1, "Please enter your date of birth"),
+  placeOfBirth: z.string().min(2, "Please enter your place of birth"),
+  gender: z.string().min(1, "Please select your gender"),
+  maritalStatus: z.string().min(1, "Please select your marital status"),
+  occupation: z.string().min(2, "Please enter your occupation"),
+  email: z.string().email("Invalid email address"),
   service: z.string().min(1, "Please select a service"),
   duration: z.string().min(1, "Please select a duration"),
   date: z.string().min(1, "Please select a date"),
@@ -17,14 +23,18 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-const UPI_ID = "7877082223@upi";
-
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
-    { time: "10 Minutes", price: "₹199" },
-    { time: "15 Minutes", price: "₹249" },
-    { time: "30 Minutes", price: "₹499" },
-    { time: "1 Hour", price: "₹899" },
+    { time: "Chat Session - 20 Minutes", price: "₹499" },
+    { time: "Chat Session - 30 Minutes", price: "₹699" },
+    { time: "Chat Session - 60 Minutes", price: "₹1,299" },
+    { time: "Video Call - 30 Minutes", price: "₹999" },
+    { time: "Video Call - 1 Hour", price: "₹1,899" },
+    { time: "Call - 15 Minutes", price: "₹399" },
+    { time: "Call - 20 Minutes", price: "₹549" },
+    { time: "Call - 30 Minutes", price: "₹799" },
+    { time: "Call - 45 Minutes", price: "₹1,199" },
+    { time: "Call - 1 Hour", price: "₹1,499" },
   ],
   "spell casting & healer": [
     { time: "Consultation", price: "₹699" },
@@ -58,21 +68,16 @@ export function Booking() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
-  const [copied, setCopied] = useState(false);
   const [selectedService, setSelectedService] = useState("");
+  const [isDurationOpen, setIsDurationOpen] = useState(false);
+  const durationMenuRef = useRef<HTMLDivElement | null>(null);
 
   const styleTag = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
     .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }
   `;
 
-  const copyUPI = () => {
-    navigator.clipboard.writeText(UPI_ID);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormData>({
     resolver: zodResolver(formSchema)
   });
 
@@ -110,10 +115,29 @@ export function Booking() {
   };
 
   const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedService(e.target.value);
+    const nextService = e.target.value;
+    setSelectedService(nextService);
+    setValue("service", nextService, { shouldValidate: true, shouldDirty: true });
+    setValue("duration", "", { shouldValidate: true, shouldDirty: true });
+    setIsDurationOpen(false);
   };
 
   const currentPackages = watchedService ? servicePackages[watchedService.toLowerCase()] : [];
+  const selectedDuration = currentPackages.find((pkg) => pkg.time === watch("duration"));
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (durationMenuRef.current && !durationMenuRef.current.contains(event.target as Node)) {
+        setIsDurationOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, []);
 
   return (
     <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
@@ -126,7 +150,7 @@ export function Booking() {
         >
           <div className="mb-6 inline-block">
             <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3">Schedule Your Reading</h2>
-            <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+            <div className="h-px bg-linear-to-r from-transparent via-primary to-transparent"></div>
           </div>
           <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white">Open the Portal</h3>
         </motion.div>
@@ -165,7 +189,85 @@ export function Booking() {
                 />
                 {errors.phone && <p className="text-destructive text-sm mt-1">{errors.phone.message}</p>}
               </div>
-              
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Date of Birth</label>
+                <input 
+                  {...register("dob")}
+                  type="date"
+                  data-testid="input-dob"
+                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                />
+                {errors.dob && <p className="text-destructive text-sm mt-1">{errors.dob.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Place of Birth</label>
+                <input 
+                  {...register("placeOfBirth")}
+                  data-testid="input-place-of-birth"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="City, State, Country"
+                />
+                {errors.placeOfBirth && <p className="text-destructive text-sm mt-1">{errors.placeOfBirth.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Gender</label>
+                <select 
+                  {...register("gender")}
+                  data-testid="select-gender"
+                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                >
+                  <option value="">Select gender...</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+                {errors.gender && <p className="text-destructive text-sm mt-1">{errors.gender.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Marital Status</label>
+                <select 
+                  {...register("maritalStatus")}
+                  data-testid="select-marital-status"
+                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                >
+                  <option value="">Select marital status...</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Divorced">Divorced</option>
+                  <option value="Widowed">Widowed</option>
+                  <option value="Separated">Separated</option>
+                </select>
+                {errors.maritalStatus && <p className="text-destructive text-sm mt-1">{errors.maritalStatus.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Occupation</label>
+                <input 
+                  {...register("occupation")}
+                  data-testid="input-occupation"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="Your profession"
+                />
+                {errors.occupation && <p className="text-destructive text-sm mt-1">{errors.occupation.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Email</label>
+                <input 
+                  {...register("email")}
+                  type="email"
+                  data-testid="input-email"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="jane@example.com"
+                />
+                {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Service Type</label>
                 <select 
@@ -185,19 +287,51 @@ export function Booking() {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Session Duration / Package</label>
-                <select 
-                  {...register("duration")}
-                  data-testid="select-duration"
-                  disabled={!selectedService}
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select duration / package...</option>
-                  {currentPackages.map((pkg) => (
-                    <option key={pkg.time} value={pkg.time}>
-                      {pkg.time} ({pkg.price})
-                    </option>
-                  ))}
-                </select>
+                <input type="hidden" {...register("duration")} />
+                <div className="relative" ref={durationMenuRef}>
+                  <button
+                    type="button"
+                    data-testid="select-duration"
+                    disabled={!selectedService}
+                    aria-expanded={isDurationOpen}
+                    onClick={() => setIsDurationOpen((open) => !open)}
+                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className={selectedDuration ? "text-white" : "text-white/50"}>
+                      {selectedDuration ? selectedDuration.time : "Select duration / package..."}
+                    </span>
+                    <span className={selectedDuration ? "text-primary font-semibold whitespace-nowrap" : "text-primary/60 whitespace-nowrap"}>
+                      {selectedDuration ? selectedDuration.price : ""}
+                    </span>
+                  </button>
+
+                  {isDurationOpen && selectedService && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                      <div className="max-h-72 overflow-y-auto">
+                        {currentPackages.map((pkg) => {
+                          const isSelected = watch("duration") === pkg.time;
+
+                          return (
+                            <button
+                              key={pkg.time}
+                              type="button"
+                              onClick={() => {
+                                setValue("duration", pkg.time, { shouldValidate: true, shouldDirty: true });
+                                setIsDurationOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5 ${
+                                isSelected ? "bg-primary/10" : ""
+                              }`}
+                            >
+                              <span className="text-sm sm:text-base text-white">{pkg.time}</span>
+                              <span className="text-sm sm:text-base font-semibold text-[#ffd86b] whitespace-nowrap">{pkg.price}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {errors.duration && <p className="text-destructive text-sm mt-1">{errors.duration.message}</p>}
               </div>
 
@@ -228,44 +362,15 @@ export function Booking() {
                 {errors.timeslot && <p className="text-destructive text-sm mt-1">{errors.timeslot.message}</p>}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>
                 <textarea 
                   {...register("message")}
                   data-testid="input-message"
                   rows={4}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
-                  placeholder="What brings you to seek guidance today?"
+                  placeholder="What brings you to seek guidance ?"
                 ></textarea>
-              </div>
-            </div>
-
-            {/* UPI Payment Section */}
-            <div className="pt-6 border-t border-white/10">
-              <p className="text-xs font-bold uppercase tracking-widest text-foreground/60 mb-4 text-center">Payment Method</p>
-              <div className="bg-white/5 border border-primary/30 rounded-2xl p-5 mb-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <span className="text-primary font-bold text-lg">₹</span>
-                    </div>
-                    <div className="text-left min-w-0">
-                      <p className="text-xs text-foreground/60 font-bold uppercase tracking-wider mb-1">UPI Payment (GPay / PhonePe / Paytm)</p>
-                      <p className="text-white font-bold text-base sm:text-lg tracking-wider break-all">{UPI_ID}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyUPI}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-primary/50 text-primary text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all duration-300 flex-shrink-0 w-full sm:w-auto justify-center"
-                  >
-                    {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {copied ? "Copied!" : "Copy UPI"}
-                  </button>
-                </div>
-                <p className="text-foreground/50 text-xs mt-4 text-center italic">
-                  * Booking confirm hone ke baad payment karein. Screenshot WhatsApp pe bhejein: +91 78770 82223
-                </p>
               </div>
             </div>
 
@@ -298,7 +403,7 @@ export function Booking() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a1a]/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-100 flex items-center justify-center bg-[#0a0a1a]/80 backdrop-blur-sm p-4"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
@@ -320,7 +425,7 @@ export function Booking() {
               
               <h3 className="text-3xl font-serif font-bold text-white mb-4">Journey Initiated</h3>
               <p className="text-foreground/90 font-light leading-relaxed mb-8">
-                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A payment link and confirmation will be sent to your email shortly.
+                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A confirmation will be sent to your email shortly.
               </p>
               
               <button 
