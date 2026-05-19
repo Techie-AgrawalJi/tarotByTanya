@@ -41,10 +41,12 @@ export function Pricing() {
       { time: "Call - 1 Hour", price: "₹1,499", included: "Unlimited questions during a 1-hour call" },
     ],
     "spell casting & healer": [
-      { time: "Consultation", price: "₹699", included: "Initial assessment, spell needs discussion" },
-      { time: "Basic Spell", price: "₹1,499", included: "Single intention spell casting" },
-      { time: "Healing Session", price: "₹1,999", included: "Energy healing + cleansing ritual" },
-      { time: "Premium Package", price: "₹3,499", included: "Custom spell + healing + follow-up" },
+      { time: "Healing - 1 Day", price: "₹1,300", included: "Energy healing and cleansing ritual" },
+      { time: "Healing - 3 Days", price: "₹3,800", included: "3-day healing program with daily energy work" },
+      { time: "Healing - 5 Days", price: "₹6,400", included: "Intensive 5-day healing transformation" },
+      { time: "Spell - 3 Days", price: "₹3,600", included: "3-day spell casting for your intention" },
+      { time: "Spell - 5 Days", price: "₹5,900", included: "5-day spell casting program" },
+      { time: "Spell - 7 Days", price: "₹8,100", included: "Comprehensive 7-day spell casting ritual" },
     ],
     "manifestation rituals": [
       { time: "Single Ritual", price: "₹799", included: "One-time manifestation ritual" },
@@ -98,6 +100,11 @@ export function Pricing() {
           ))}
         </div>
 
+        {activeTab === "spell casting & healer" && (
+          <div className="mb-6 w-full text-center">
+            <p className="text-sm text-foreground/70 italic">Note: Charges for all spell types are the same.</p>
+          </div>
+        )}
         <div className={isFaceReadingTab ? "flex flex-wrap justify-center gap-6" : "grid md:grid-cols-2 lg:grid-cols-4 gap-6"}>
           {durations.map((pkg, i) => (
             <motion.div

@@ -22,11 +22,11 @@ export function Footer() {
           </div>
           <div className="flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-center lg:gap-6">
             <a
-              href="mailto:readings@celestialguidance.com"
+              href="mailto:tanyaagrawal1711@gmail.com"
               className="flex items-center gap-3 text-foreground/70 hover:text-primary transition-colors"
             >
               <Mail className="w-4 h-4 text-primary shrink-0" />
-              <span>readings@celestialguidance.com</span>
+              <span>tanyaagrawal1711@gmail.com</span>
             </a>
             <a
               href="tel:+917877082223"
@@ -50,16 +50,18 @@ export function Footer() {
         <div className="flex flex-col gap-4 text-base text-foreground/55 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3 lg:justify-end">
             <a
-              href="#"
+              href="https://www.instagram.com/tarot_reader_tanyaa11?igsh=MTgzbzVoYTNvcGtjcQ=="
               className="w-9 h-9 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-foreground/70 hover:text-white hover:bg-[#E1306C] hover:border-[#E1306C] transition-colors"
               aria-label="Instagram"
+              target="_blank"
             >
               <SiInstagram className="w-4 h-4" />
             </a>
             <a
-              href="#"
+              href="https://www.facebook.com/share/18dVDhxxQM/"
               className="w-9 h-9 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-foreground/70 hover:text-white hover:bg-[#1877F2] hover:border-[#1877F2] transition-colors"
               aria-label="Facebook"
+              target="_blank"
             >
               <SiFacebook className="w-4 h-4" />
             </a>
