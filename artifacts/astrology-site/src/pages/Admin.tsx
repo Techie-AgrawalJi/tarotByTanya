@@ -1,20 +1,18 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Mail, Eye } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Mail } from "lucide-react";
 import {
-  getBookings,
-  subscribe,
-  removeBooking,
   clearBookings,
+  getBookings,
+  removeBooking,
+  updateBookingStatus,
+  subscribe,
 } from "@/lib/bookingsStore";
-import { BookedSession } from "@/lib/slotManager";
-import { Starfield } from "@/components/Starfield";
-import Candles from "@/components/Candles";
+import { type BookedSession } from "@/lib/slotManager";
+import Candles from "../components/Candles";
 
-const ADMIN_EMAIL =
-  (import.meta as any).env.VITE_ADMIN_EMAIL || "admin@example.com";
-const ADMIN_PASSWORD =
-  (import.meta as any).env.VITE_ADMIN_PASSWORD || "password123";
+const ADMIN_EMAIL = (import.meta as any).env.VITE_ADMIN_EMAIL || "admin@example.com";
+const ADMIN_PASSWORD = (import.meta as any).env.VITE_ADMIN_PASSWORD || "password123";
 
 export default function Admin() {
   const [isAuthenticated, setAuthenticated] = useState<boolean>(
@@ -22,19 +20,18 @@ export default function Admin() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [bookings, setBookings] = useState<BookedSession[]>([]);
 
   useEffect(() => {
-    const unsub = subscribe((b) => setBookings(b));
+    const unsub = subscribe((nextBookings) => setBookings(nextBookings));
     return unsub;
   }, []);
 
   useEffect(() => {
-    // load persisted bookings from API first
-    const API_BASE =
-      (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+    const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
     fetch(`${API_BASE}/api/bookings`)
-      .then((r) => r.json())
+      .then((response) => response.json())
       .then((json) => {
         if (json && json.bookings) setBookings(json.bookings);
         else setBookings(getBookings());
@@ -42,9 +39,9 @@ export default function Admin() {
       .catch(() => setBookings(getBookings()));
   }, []);
 
-  function handleLogin(e: React.FormEvent) {
+  function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    if (email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
       localStorage.setItem("admin_token", "1");
       setAuthenticated(true);
     } else {
@@ -54,232 +51,245 @@ export default function Admin() {
 
   function handleLogout() {
     localStorage.removeItem("admin_token");
-    setAuthenticated(false);
+    window.location.href = "/";
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main
+        className="relative isolate flex min-h-screen items-center justify-center overflow-hidden font-serif text-white"
+        style={{ background: "#12112a" }}
+      >
+        <Candles />
+
+        <section className="relative z-10 w-full px-4 py-8">
+          <div className="mx-auto w-full max-w-95 rounded-2xl border border-[rgba(212,180,106,0.28)] bg-[rgba(14,13,32,0.72)] px-9 py-9 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-md animate-[cardIn_0.9s_cubic-bezier(0.22,1,0.36,1)_both]">
+            <div className="mb-7 flex justify-start">
+              <Link href="/">
+                <button className="inline-flex items-center gap-1.5 border-none bg-transparent text-[13px] tracking-[0.04em] text-[rgba(255,255,255,0.28)] transition-colors hover:text-[#d4b46a]">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+              </Link>
+            </div>
+
+            <div className="mb-7 flex items-center justify-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(212,180,106,0.28)] bg-[rgba(212,180,106,0.18)] text-[20px]">
+                🔮
+              </div>
+              <div className="font-serif text-[16px] font-semibold tracking-[0.09em] text-[#d4b46a]">
+                DivineTanyaa
+              </div>
+            </div>
+
+            <div className="mb-6 h-px bg-[rgba(255,255,255,0.07)]" />
+
+            <p className="mb-7 text-center font-serif text-[10.5px] font-normal uppercase tracking-[0.22em] text-[rgba(255,255,255,0.28)]">
+              ADMIN PORTAL
+            </p>
+
+            <form onSubmit={handleLogin} className="space-y-[1.1rem]">
+              <div className="space-y-1.5">
+                <label className="font-serif text-[10px] uppercase tracking-[0.15em] text-[rgba(255,255,255,0.28)]">
+                  Email
+                </label>
+                <div className="relative">
+                  <input
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="admin@divinetanyaa.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    style={{ textTransform: "none" }}
+                    className="login-input-normal font-sans h-11 w-full rounded-xl border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.045)] px-3.5 pr-10 text-[15px] text-[rgba(255,255,255,0.82)] outline-none transition-colors placeholder:text-[rgba(255,255,255,0.18)] focus:border-[rgba(212,180,106,0.45)] focus:shadow-[0_0_0_3px_rgba(212,180,106,0.07)]"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[rgba(255,255,255,0.2)]">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-serif text-[10px] uppercase tracking-[0.15em] text-[rgba(255,255,255,0.28)]">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    style={{ textTransform: "none" }}
+                    className="login-input-normal font-sans h-11 w-full rounded-xl border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.045)] px-3.5 pr-10 text-[15px] text-[rgba(255,255,255,0.82)] outline-none transition-colors placeholder:text-[rgba(255,255,255,0.18)] focus:border-[rgba(212,180,106,0.45)] focus:shadow-[0_0_0_3px_rgba(212,180,106,0.07)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[rgba(255,255,255,0.2)] transition-colors hover:text-[#d4b46a]"
+                    aria-label="Toggle password visibility"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="mt-7 h-12 w-full rounded-xl border border-[rgba(212,180,106,0.28)] bg-[linear-gradient(135deg,#b8922e,#d4b46a,#b8922e)] font-serif text-[12px] font-semibold uppercase tracking-[0.18em] text-[#1a1000] transition-opacity duration-200 hover:opacity-90 active:scale-[0.985]"
+                style={{ backgroundSize: "200% auto" }}
+              >
+                Enter the Portal
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-[12px] tracking-wider text-[rgba(255,255,255,0.15)]">
+              Secured access only
+            </p>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen relative font-sans text-foreground">
-      <Starfield />
-      {/* Minimal brand header for admin pages (logo + site name only) */}
-      <header className="container mx-auto px-4 md:px-8 pt-6">
-        <div className="flex items-center gap-2 text-primary font-serif font-bold text-xl md:text-2xl">
-          <Link href="/">
-            <button aria-label="View logo" className="inline-flex p-0">
-              <img
-                src="logo.png"
-                alt="logo"
-                className="h-10 w-10 md:h-12 md:w-12 object-contain"
-              />
-            </button>
-          </Link>
-          <Link href="/">
-            <button
-              onClick={() => {}}
-              className="ml-2 cursor-pointer text-left text-white"
-            >
-              DivineTanyaa
-            </button>
-          </Link>
-        </div>
-      </header>
+    <main className="relative isolate min-h-screen overflow-hidden bg-[#090712] font-sans text-foreground">
       <Candles />
-      <div className="container mx-auto max-w-4xl py-12">
-        {!isAuthenticated ? (
-          <div className="mx-auto w-full px-4 sm:px-6 md:px-0 max-w-[92%] sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl">
-            <div className="glass-card rounded-2xl p-6 md:p-8 bg-[#0b0b18]/50 border border-white/10">
-              <div className="flex justify-start mb-4">
-                <Link href="/">
-                  <button className="inline-flex items-center gap-2 px-2 py-1 rounded bg-transparent text-white/80 hover:opacity-90">
-                    <ArrowLeft className="w-4 h-4" />
-                    Back
-                  </button>
-                </Link>
-              </div>
 
-              <div className="flex flex-col items-center gap-4 mb-6">
-                <div className="w-20 h-20 rounded-full bg-[#0a0a0f] border-2 border-amber-400 flex items-center justify-center shadow-[0_6px_24px_rgba(201,168,76,0.08)]">
-                  <img src="logo.png" alt="logo" className="w-10 h-10" />
-                </div>
-                <div className="text-2xl font-serif font-semibold text-amber-300">
-                  DivineTanyaa
-                </div>
-                <hr className="w-3/4 border-t border-white/10 mt-2 mb-2" />
-                <div className="text-xs tracking-widest text-white/60">
-                  ADMIN PORTAL
-                </div>
-              </div>
+      <div className="relative z-10 mx-auto w-full max-w-4xl px-4 py-12 md:px-8">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h2 className="text-2xl font-semibold text-white">Admin Dashboard</h2>
 
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div>
-                  <label className="text-xs text-white/60 uppercase tracking-wider">
-                    Email
-                  </label>
-                  <div className="relative mt-2">
-                    <input
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@divinetanyaa.com"
-                      className="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                if (!confirm("Clear all bookings?")) return;
+                const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+                try {
+                  const response = await fetch(`${API_BASE}/api/bookings`, {
+                    method: "DELETE",
+                  });
+                  const json = await response.json();
+                  if (json.ok) {
+                    clearBookings();
+                    setBookings([]);
+                  } else {
+                    alert("Failed to clear bookings");
+                  }
+                } catch (error) {
+                  alert("Failed to clear bookings");
+                }
+              }}
+              className="rounded bg-white/5 px-3 py-2 text-white"
+            >
+              Clear All
+            </button>
 
-                <div>
-                  <label className="text-xs text-white/60 uppercase tracking-wider">
-                    Password
-                  </label>
-                  <div className="relative mt-2">
-                    <input
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      type="password"
-                      placeholder="••••••••"
-                      className="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50">
-                      <Eye className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-[#0a0a0a] font-semibold tracking-wider"
-                >
-                  Enter the Portal
-                </button>
-              </form>
-
-            </div>
+            <button onClick={handleLogout} className="rounded bg-white/5 px-3 py-2 text-white">
+              Logout
+            </button>
           </div>
-        ) : (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <Link href="/">
-                  <button className="inline-flex items-center gap-2 px-3 py-2 rounded bg-white/5 text-white hover:bg-white/10">
-                    <ArrowLeft className="w-4 h-4" />
-                    Back
-                  </button>
-                </Link>
-                <h2 className="text-2xl font-semibold text-white">
-                  Admin Dashboard
-                </h2>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    if (!confirm("Clear all bookings?")) return;
-                    const API_BASE =
-                      (import.meta as any).env.VITE_API_BASE ||
-                      "http://localhost:5000";
-                    try {
-                      const res = await fetch(`${API_BASE}/api/bookings`, {
-                        method: "DELETE",
-                      });
-                      const j = await res.json();
-                      if (j.ok) {
-                        clearBookings();
-                        setBookings([]);
-                      } else {
-                        alert("Failed to clear bookings");
-                      }
-                    } catch (err) {
-                      alert("Failed to clear bookings");
-                    }
-                  }}
-                  className="px-3 py-2 rounded bg-white/5 text-white"
-                >
-                  Clear All
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="px-3 py-2 rounded bg-white/5 text-white"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-            <div className="glass-card rounded-2xl p-8 bg-[#0b0b18]/60 border border-white/10">
-              <h3 className="text-lg text-white mb-2">
-                Total Bookings: {bookings.length}
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="text-white/70">
-                      <th className="px-3 py-2">ID</th>
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2">Phone</th>
-                      <th className="px-3 py-2">Service</th>
-                      <th className="px-3 py-2">Start</th>
-                      <th className="px-3 py-2">End</th>
-                      <th className="px-3 py-2">Buffer End</th>
-                      <th className="px-3 py-2">Duration</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map((b) => (
-                      <tr key={b.id} className="border-t border-white/5">
-                        <td className="px-3 py-2 text-white/70">{b.id}</td>
-                        <td className="px-3 py-2 text-white">{b.clientName}</td>
-                        <td className="px-3 py-2 text-white/70">
-                          {b.clientPhone}
-                        </td>
-                        <td className="px-3 py-2 text-white/70">
-                          {b.sessionType}
-                        </td>
-                        <td className="px-3 py-2 text-white/70">
-                          {b.startTime}
-                        </td>
-                        <td className="px-3 py-2 text-white/70">{b.endTime}</td>
-                        <td className="px-3 py-2 text-white/70">
-                          {b.bufferEndTime}
-                        </td>
-                        <td className="px-3 py-2 text-white/70">
-                          {b.durationMinutes}m
-                        </td>
-                        <td className="px-3 py-2 text-white/70">{b.status}</td>
-                        <td className="px-3 py-2">
+        </div>
+
+        <div className="glass-card rounded-2xl border border-white/10 bg-[#0b0b18]/60 p-8">
+          <h3 className="mb-2 text-lg text-white">Total Bookings: {bookings.length}</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-white/70">
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Service</th>
+                  <th className="px-3 py-2">Start</th>
+                  <th className="px-3 py-2">End</th>
+                  <th className="px-3 py-2">Buffer End</th>
+                  <th className="px-3 py-2">Duration</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map((booking) => (
+                  <tr key={booking.id} className="border-t border-white/5">
+                    <td className="px-3 py-2 text-white">{booking.clientName}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.clientPhone}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.sessionType}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.startTime}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.endTime}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.bufferEndTime}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.durationMinutes}m</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-2 lg:flex-nowrap">
+                        {booking.status !== "COMPLETED" ? (
                           <button
                             onClick={async () => {
-                              if (!confirm("Delete this booking?")) return;
-                              const API_BASE =
-                                (import.meta as any).env.VITE_API_BASE ||
-                                "http://localhost:5000";
+                              const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
                               try {
-                                const res = await fetch(
-                                  `${API_BASE}/api/bookings/${b.id}`,
-                                  { method: "DELETE" },
-                                );
-                                const j = await res.json();
-                                if (j.ok) {
-                                  removeBooking(b.id);
+                                const response = await fetch(`${API_BASE}/api/bookings/${booking.id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ status: "COMPLETED" }),
+                                });
+                                const json = await response.json();
+                                if (json.ok && json.booking) {
+                                  updateBookingStatus(booking.id, "COMPLETED");
+                                  setBookings((current) =>
+                                    current.map((entry) =>
+                                      entry.id === booking.id ? { ...entry, status: "COMPLETED" } : entry,
+                                    ),
+                                  );
                                 } else {
-                                  alert("Failed to delete booking");
+                                  alert("Failed to mark reading as completed");
                                 }
-                              } catch (err) {
-                                alert("Failed to delete booking");
+                              } catch (error) {
+                                alert("Failed to mark reading as completed");
                               }
                             }}
-                            className="px-2 py-1 rounded bg-destructive text-white text-xs"
+                            className="rounded bg-emerald-500/20 px-2 py-1 text-emerald-200"
                           >
-                            Delete
+                            Mark Completed
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        ) : (
+                          <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200">
+                            Completed
+                          </span>
+                        )}
+
+                        <button
+                          onClick={async () => {
+                            if (!confirm("Delete this booking?")) return;
+                            const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+                            try {
+                              const response = await fetch(`${API_BASE}/api/bookings/${booking.id}`, {
+                                method: "DELETE",
+                              });
+                              const json = await response.json();
+                              if (json.ok) {
+                                removeBooking(booking.id);
+                                setBookings((current) => current.filter((entry) => entry.id !== booking.id));
+                              } else {
+                                alert("Failed to delete booking");
+                              }
+                            } catch (error) {
+                              alert("Failed to delete booking");
+                            }
+                          }}
+                          className="rounded bg-red-500/20 px-2 py-1 text-red-200"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
     </main>
   );

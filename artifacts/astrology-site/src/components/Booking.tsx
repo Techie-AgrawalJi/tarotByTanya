@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/slotManager";
 import { getBookings, addBooking, subscribe } from "@/lib/bookingsStore";
 import { Timeline, TimelineCompact } from "@/components/Timeline";
+import { loadBookingDraft, parsePriceLabel, saveBookingDraft } from "@/lib/bookingCheckout";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -29,7 +31,6 @@ const formSchema = z.object({
   service: z.string().min(1, "Please select a service"),
   duration: z.string().min(1, "Please select a duration"),
   date: z.string().min(1, "Please select a date"),
-  timeslot: z.string().min(1, "Please select a time slot"),
   message: z.string().optional(),
 });
 
@@ -78,6 +79,7 @@ function scrollToSection(id: string): void {
 }
 
 export function Booking() {
+  const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
@@ -92,9 +94,6 @@ export function Booking() {
   const [selectedGender, setSelectedGender] = useState("");
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const serviceMenuRef = useRef<HTMLDivElement | null>(null);
-  const [isTimeslotOpen, setIsTimeslotOpen] = useState(false);
-  const timeslotMenuRef = useRef<HTMLDivElement | null>(null);
-  const [selectedTimeslot, setSelectedTimeslot] = useState("");
   
   // Slot management state (for Tarot sessions)
   const [selectedDate, setSelectedDate] = useState("");
@@ -119,9 +118,45 @@ export function Booking() {
 
   const watchedService = watch("service");
 
+  useEffect(() => {
+    const draft = loadBookingDraft();
+    if (!draft) return;
+
+    const payload = draft.payload;
+    if (typeof payload.name === "string") setValue("name", payload.name);
+    if (typeof payload.phone === "string") setValue("phone", payload.phone);
+    if (typeof payload.dob === "string") setValue("dob", payload.dob);
+    if (typeof payload.placeOfBirth === "string") setValue("placeOfBirth", payload.placeOfBirth);
+    if (typeof payload.gender === "string") setValue("gender", payload.gender);
+    if (typeof payload.maritalStatus === "string") setValue("maritalStatus", payload.maritalStatus);
+    if (typeof payload.occupation === "string") setValue("occupation", payload.occupation);
+    if (typeof payload.email === "string") setValue("email", payload.email);
+    if (typeof payload.service === "string") {
+      setSelectedService(payload.service);
+      setValue("service", payload.service, { shouldValidate: true, shouldDirty: true });
+    }
+    if (typeof payload.duration === "string") setValue("duration", payload.duration, { shouldValidate: true, shouldDirty: true });
+    if (typeof payload.date === "string") {
+      setSelectedDate(payload.date);
+      setValue("date", payload.date, { shouldValidate: true, shouldDirty: true });
+    }
+    if (typeof payload.message === "string") setValue("message", payload.message);
+  }, [setValue]);
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
+      if (!selectedDuration) {
+        alert("Please select a package before continuing to SMEpay.");
+        return;
+      }
+
+      const amount = parsePriceLabel(selectedDuration.price);
+      if (!amount) {
+        alert("Unable to determine the payment amount for this package.");
+        return;
+      }
+
       // For Tarot sessions, include slot timing data
       let bookingData: any = {
         ...data,
@@ -141,48 +176,21 @@ export function Booking() {
         };
       }
 
-      // send to local API (falls back to http://localhost:3000)
-      const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
-      const response = await fetch(`${API_BASE}/api/bookings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
+      saveBookingDraft({
+        payload: {
+          ...bookingData,
+          paymentAmount: amount,
+          paymentStatus: "PENDING",
         },
-        body: JSON.stringify(bookingData)
+        amount,
+        amountLabel: selectedDuration.price,
+        serviceLabel: data.service,
+        durationLabel: data.duration,
+        createdAt: new Date().toISOString(),
+        slotTiming: bookingData.slotTiming,
       });
 
-      const respJson = await response.json().catch(() => null);
-
-      if (response.ok && respJson && respJson.booking) {
-        // Add the booking to the frontend store for real-time updates
-        const serverBooking = respJson.booking as any;
-        const newBooking: BookedSession = {
-          id: serverBooking.id,
-          clientName: serverBooking.clientName || data.name,
-          clientPhone: serverBooking.clientPhone || data.phone || data.whatsapp,
-          startTime: serverBooking.startTime || selectedSlot,
-          endTime: serverBooking.endTime || selectedSlot,
-          bufferEndTime: serverBooking.bufferEndTime || selectedSlot,
-          durationMinutes: serverBooking.durationMinutes || getSessionDurationFromService(data.duration),
-          sessionType: serverBooking.sessionType || "tarot",
-          status: serverBooking.status || "BOOKED",
-          bookingTime: serverBooking.bookingTime || new Date().toISOString(),
-        };
-
-        addBooking(newBooking);
-
-        setSubmittedName(data.name);
-        setShowSuccess(true);
-        reset();
-        setSelectedService("");
-        setSelectedSlot("");
-        setSelectedDate("");
-        setSessionSummary("");
-      } else {
-        console.error(respJson);
-        alert("There was a problem submitting your request. Please try again.");
-      }
+      navigate("/payment");
     } catch (err) {
       console.error(err);
       alert("There was a problem submitting your request. Please try again.");
@@ -219,9 +227,6 @@ export function Booking() {
       }
       if (serviceMenuRef.current && !serviceMenuRef.current.contains(event.target as Node)) {
         setIsServiceOpen(false);
-      }
-      if (timeslotMenuRef.current && !timeslotMenuRef.current.contains(event.target as Node)) {
-        setIsTimeslotOpen(false);
       }
     };
 
@@ -568,7 +573,6 @@ export function Booking() {
                                               onClick={() => {
                                                 // select this block's next available start
                                                 setSelectedSlot(blockInfo.startTime || "");
-                                                setValue("timeslot", blockInfo.startTime || "", { shouldValidate: true, shouldDirty: true });
                                                 const fakeBooking: BookedSession = {
                                                   id: `preview_${Date.now()}`,
                                                   clientName: "",
@@ -606,48 +610,6 @@ export function Booking() {
                               )}
                             </div>
                           )}
-
-              {/* Fallback: Preferred Time Slot for non-Tarot services */}
-              {watchedService && watchedService.toLowerCase() !== "tarot" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Time Slot</label>
-                  <div className="relative" ref={timeslotMenuRef}>
-                    <input type="hidden" {...register("timeslot")} />
-                    <button
-                      type="button"
-                      data-testid="select-timeslot"
-                      aria-expanded={isTimeslotOpen}
-                      onClick={() => setIsTimeslotOpen((open) => !open)}
-                      className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    >
-                      <span className={selectedTimeslot ? "text-white" : "text-white/50"}>{selectedTimeslot || "Select time slot..."}</span>
-                      <span className="text-primary/60" />
-                    </button>
-
-                    {isTimeslotOpen && (
-                      <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
-                        <div className="py-2">
-                          {[{ value: "Morning", label: "Morning (9am - 12pm)" }, { value: "Afternoon", label: "Afternoon (1pm - 5pm)" }, { value: "Evening", label: "Evening (6pm - 9pm)" }].map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                setSelectedTimeslot(opt.value);
-                                setValue("timeslot", opt.value, { shouldValidate: true, shouldDirty: true });
-                                setIsTimeslotOpen(false);
-                              }}
-                              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
-                            >
-                              <span className="text-sm sm:text-base text-white">{opt.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {errors.timeslot && <p className="text-destructive text-sm mt-1">{errors.timeslot.message}</p>}
-                </div>
-              )}
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>

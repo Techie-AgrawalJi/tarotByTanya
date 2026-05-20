@@ -202,3 +202,48 @@ input[disabled] {
 /* subtle glow under the candles */
 .candle::after { content: ""; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); width:40px; height:8px; background: radial-gradient(closest-side, rgba(255,150,60,0.08), transparent); border-radius:50%; }
 
+@keyframes candleFlicker {
+  0% {
+    transform: translateX(-50%) scale(1) translateY(0);
+    opacity: 0.94;
+  }
+  25% {
+    transform: translateX(-51%) scale(1.04) translateY(-1px);
+    opacity: 1;
+  }
+  50% {
+    transform: translateX(-49%) scale(0.98) translateY(0);
+    opacity: 0.88;
+  }
+  75% {
+    transform: translateX(-50%) scale(1.03) translateY(-2px);
+    opacity: 0.98;
+  }
+  100% {
+    transform: translateX(-50%) scale(1) translateY(0);
+    opacity: 0.94;
+  }
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-input-normal {
+  text-transform: none !important;
+  font-variant-caps: normal !important;
+  letter-spacing: normal !important;
+}
+
+.login-input-normal::placeholder {
+  text-transform: none !important;
+  font-variant-caps: normal !important;
+}
+

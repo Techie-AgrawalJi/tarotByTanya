@@ -50,7 +50,7 @@ export function Pricing() {
     ],
     "manifestation rituals": [
       { time: "St. Expedite Ritual for Wish Fulfillment", price: "₹7,100", included: "Dedicated wish-fulfillment ritual with focused intention work" },
-      { time: "Goddess Aphrodite Ritual (for Beauty)", price: "₹7,100", included: "Beauty-aligned ritual for attraction, grace, and magnetic energy" },
+      { time: "Goddess Aphrodite Ritual (for Beauty, love)", price: "₹7,100", included: "Beauty or love -aligned ritual for attraction, grace, and magnetic energy" },
       { time: "Nitika Ritual for Wealth", price: "₹3,300", included: "Wealth-oriented ritual to support abundance and prosperity" },
       { time: "King Clauneck Ritual", price: "₹7,100", included: "Prosperity ritual centered on business and financial flow" },
       { time: "Bay Leaf Manifestation Ritual", price: "₹333", included: "Simple bay leaf ritual for clear intention setting" },

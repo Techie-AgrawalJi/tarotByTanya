@@ -17,6 +17,11 @@ export function removeBooking(id: string) {
   subscribers.forEach((s) => s(getBookings()));
 }
 
+export function updateBookingStatus(id: string, status: BookedSession["status"]) {
+  bookings = bookings.map((booking) => (booking.id === id ? { ...booking, status } : booking));
+  subscribers.forEach((s) => s(getBookings()));
+}
+
 export function clearBookings() {
   bookings = [];
   subscribers.forEach((s) => s(getBookings()));

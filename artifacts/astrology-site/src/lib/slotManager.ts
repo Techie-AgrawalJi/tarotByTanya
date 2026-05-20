@@ -22,8 +22,12 @@ export interface BookedSession {
   bufferEndTime: string; // "11:10 AM" (10 min after endTime)
   durationMinutes: number;
   sessionType: "tarot" | "spell casting & healer" | "manifestation rituals" | "face reading & name";
-  status: "HELD" | "BOOKED" | "CANCELLED";
+  status: "HELD" | "BOOKED" | "CANCELLED" | "COMPLETED";
   bookingTime?: string; // ISO timestamp when booked
+  paymentMethod?: string;
+  paymentAmount?: number;
+  paymentStatus?: "PENDING" | "PAID" | "FAILED";
+  paymentReference?: string;
 }
 
 export interface SlotOption {
@@ -101,7 +105,7 @@ export function canFitSession(
 
   // Check conflicts with existing bookings
   for (const booking of bookings) {
-    if (booking.status === "CANCELLED") continue;
+    if (booking.status === "CANCELLED" || booking.status === "COMPLETED") continue;
     
     const bookingStart = timeToMinutes(booking.startTime.replace(" ", " "));
     const bookingBuffer = timeToMinutes(booking.bufferEndTime.replace(" ", " "));
@@ -197,6 +201,7 @@ export function getTimeBlocksForDay(dateString: string, bookings: BookedSession[
       const blockBookings = bookings.filter(
         (b) =>
           b.status !== "CANCELLED" &&
+          b.status !== "COMPLETED" &&
           timeToMinutes(b.startTime.replace(" ", " ")) >= blockStart &&
           timeToMinutes(b.startTime.replace(" ", " ")) < blockEnd
       );
