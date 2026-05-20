@@ -42,74 +42,43 @@ export default function Payment() {
     const paymentStatus = readPaymentStatus();
     if (!paymentStatus.isSuccess) return;
 
-    const submitBooking = async () => {
+    // If SMEpay returned a payment_id/status in the query, we'll poll the server for a verified status
+    const pollServerForStatus = async () => {
       setPaymentState("processing");
       setHasSubmitted(true);
-
       try {
-        const payload = {
-          ...draft.payload,
-          paymentMethod: "SMEpay",
-          paymentAmount: draft.amount,
-          paymentStatus: "PAID",
-          paymentReference: paymentStatus.paymentId,
-        };
-
         const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
-        const response = await fetch(`${API_BASE}/api/bookings`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
+        const resp = await fetch(`${API_BASE}/api/payments/${paymentStatus.paymentId}`);
+        const json = await resp.json().catch(() => null);
+        if (!resp.ok || !json?.payment) throw new Error(json?.error || "Unable to read payment status");
 
-        const json = await response.json().catch(() => null);
-
-        if (!response.ok || !json?.booking) {
-          throw new Error(json?.error || "Payment succeeded but booking submission failed");
+        const payment = json.payment;
+        if (payment.status === "PAID") {
+          // booking should have been created server-side by webhook; check bookings via API or assume created
+          setPaymentState("success");
+          setMessage("Payment received and booking confirmed.");
+          clearBookingDraft();
+        } else if (payment.status === "FAILED") {
+          setPaymentState("error");
+          setMessage("Payment failed. No booking was created.");
+        } else {
+          // still pending — retry a few times
+          setTimeout(pollServerForStatus, 2000);
         }
-
-        const serverBooking = json.booking as Partial<BookedSession> & {
-          paymentAmount?: number;
-          paymentStatus?: string;
-          paymentReference?: string;
-        };
-
-        addBooking({
-          id: serverBooking.id || `booking_${Date.now()}`,
-          clientName: serverBooking.clientName || String((draft.payload.name as string) || ""),
-          clientPhone: serverBooking.clientPhone || String((draft.payload.phone as string) || ""),
-          startTime: serverBooking.startTime || draft.slotTiming?.startTime || "",
-          endTime: serverBooking.endTime || draft.slotTiming?.endTime || "",
-          bufferEndTime: serverBooking.bufferEndTime || draft.slotTiming?.bufferEndTime || "",
-          durationMinutes: serverBooking.durationMinutes || draft.slotTiming?.durationMinutes || 0,
-          sessionType: serverBooking.sessionType || String((draft.payload.service as string) || "tarot").toLowerCase() as BookedSession["sessionType"],
-          paymentMethod: serverBooking.paymentMethod || "SMEpay",
-          paymentAmount: serverBooking.paymentAmount || draft.amount,
-          paymentStatus: (serverBooking.paymentStatus as BookedSession["paymentStatus"]) || "PAID",
-          paymentReference: serverBooking.paymentReference || paymentStatus.paymentId,
-          status: serverBooking.status || "BOOKED",
-          bookingTime: serverBooking.bookingTime || new Date().toISOString(),
-        });
-
-        clearBookingDraft();
-        setPaymentState("success");
-        setMessage("Payment received and booking confirmed.");
-      } catch (error) {
+      } catch (err) {
         setPaymentState("error");
-        setMessage(error instanceof Error ? error.message : "Unable to confirm booking after payment.");
+        setMessage(err instanceof Error ? err.message : "Unable to verify payment status.");
       }
     };
 
-    submitBooking();
+    pollServerForStatus();
   }, [draft, hasSubmitted]);
 
   if (!draft) {
     return null;
   }
 
+  // We now request a server-created checkout URL; fallback to client-built URL
   const checkoutUrl = buildSmepayCheckoutUrl(draft);
 
   return (
@@ -183,15 +152,38 @@ export default function Payment() {
           <div className="flex flex-col gap-3 md:flex-row">
             <button
               type="button"
-              onClick={() => {
-                if (!checkoutUrl) {
-                  setPaymentState("error");
-                  setMessage("SMEpay checkout URL is not configured.");
-                  return;
-                }
-
+              onClick={async () => {
                 setPaymentState("redirecting");
-                window.location.href = checkoutUrl;
+
+                try {
+                  const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+                  const resp = await fetch(`${API_BASE}/api/payments/create-checkout`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({
+                      amount: draft.amount,
+                      currency: "INR",
+                      description: `${draft.serviceLabel} - ${draft.durationLabel}`,
+                      payload: draft.payload,
+                      returnUrl: `${window.location.origin}/payment`,
+                    }),
+                  });
+
+                  const json = await resp.json().catch(() => null);
+                  if (!resp.ok || !json?.checkoutUrl) {
+                    throw new Error(json?.error || "Unable to create checkout");
+                  }
+
+                  // Save payment id in session so return page can read it if needed
+                  try {
+                    sessionStorage.setItem("pending_payment_id", json.paymentId);
+                  } catch {}
+
+                  window.location.href = json.checkoutUrl;
+                } catch (err) {
+                  setPaymentState("error");
+                  setMessage(err instanceof Error ? err.message : "Unable to open checkout.");
+                }
               }}
               disabled={paymentState === "redirecting" || paymentState === "processing"}
               className="inline-flex flex-1 items-center justify-center rounded-full bg-primary px-6 py-4 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"

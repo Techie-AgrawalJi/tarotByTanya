@@ -36,21 +36,67 @@ router.post("/payments/create-checkout", async (req, res) => {
     payments.push(newPayment);
     await writePayments(payments);
 
-    // Build checkout URL from SMEpay base configured in env
-    const base = process.env.SMEPAY_CHECKOUT_URL || process.env.SMEPAY_BASE_URL || "";
+    // Attempt server-side SMEpay session creation when credentials are present
+    const smepayCreateUrl = process.env.SMEPAY_CREATE_URL || process.env.SMEPAY_API_URL || "";
+    const smepayApiKey = process.env.SMEPAY_API_KEY || process.env.SMEPAY_SECRET || "";
+
     let checkoutUrl = "";
-    if (base) {
+
+    if (smepayCreateUrl && smepayApiKey) {
       try {
-        const url = new URL(base);
-        url.searchParams.set("amount", String(amount));
-        url.searchParams.set("currency", newPayment.currency);
-        url.searchParams.set("description", description);
-        url.searchParams.set("payment_id", paymentId);
-        url.searchParams.set("return_url", body.returnUrl || `${req.protocol}://${req.get("host")}/payment`);
-        checkoutUrl = url.toString();
+        const createBody = {
+          amount,
+          currency: newPayment.currency,
+          description,
+          payment_id: paymentId,
+          return_url: body.returnUrl || `${req.protocol}://${req.get("host")}/payment`,
+        };
+
+        const resp = await fetch(smepayCreateUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${smepayApiKey}`,
+          },
+          body: JSON.stringify(createBody),
+        });
+
+        const apiResp: any = await resp.json().catch(() => null);
+
+        // store gateway response on the payment record
+        const paymentsAfter = await readPayments();
+        const idx = paymentsAfter.findIndex((p: any) => p.id === paymentId);
+        if (idx !== -1) {
+          paymentsAfter[idx].gatewayResponse = apiResp || null;
+          await writePayments(paymentsAfter);
+        }
+
+        if (resp.ok && apiResp) {
+          // common fields returned by gateway
+          checkoutUrl = apiResp.checkout_url || apiResp.url || apiResp.redirect_url || "";
+        }
       } catch (err) {
-        // fallback
-        checkoutUrl = `${base}?amount=${amount}&payment_id=${paymentId}`;
+        // ignore and fallback to composed URL below
+        checkoutUrl = "";
+      }
+    }
+
+    // Fallback: build checkout URL from SMEpay base configured in env
+    if (!checkoutUrl) {
+      const base = process.env.SMEPAY_CHECKOUT_URL || process.env.SMEPAY_BASE_URL || "";
+      if (base) {
+        try {
+          const url = new URL(base);
+          url.searchParams.set("amount", String(amount));
+          url.searchParams.set("currency", newPayment.currency);
+          url.searchParams.set("description", description);
+          url.searchParams.set("payment_id", paymentId);
+          url.searchParams.set("return_url", body.returnUrl || `${req.protocol}://${req.get("host")}/payment`);
+          checkoutUrl = url.toString();
+        } catch (err) {
+          // fallback
+          checkoutUrl = `${base}?amount=${amount}&payment_id=${paymentId}`;
+        }
       }
     }
 
