@@ -49,10 +49,11 @@ export function Pricing() {
       { time: "Spell - 7 Days", price: "₹8,100", included: "Comprehensive 7-day spell casting ritual" },
     ],
     "manifestation rituals": [
-      { time: "Single Ritual", price: "₹799", included: "One-time manifestation ritual" },
-      { time: "30-Day Program", price: "₹2,499", included: "Daily guidance, weekly rituals" },
-      { time: "Quarterly Plan", price: "₹5,999", included: "Monthly rituals, personalized practices" },
-      { time: "Annual Alignment", price: "₹9,999", included: "Comprehensive yearly program with support" },
+      { time: "St. Expedite Ritual for Wish Fulfillment", price: "₹7,100", included: "Dedicated wish-fulfillment ritual with focused intention work" },
+      { time: "Goddess Aphrodite Ritual (for Beauty)", price: "₹7,100", included: "Beauty-aligned ritual for attraction, grace, and magnetic energy" },
+      { time: "Nitika Ritual for Wealth", price: "₹3,300", included: "Wealth-oriented ritual to support abundance and prosperity" },
+      { time: "King Clauneck Ritual", price: "₹7,100", included: "Prosperity ritual centered on business and financial flow" },
+      { time: "Bay Leaf Manifestation Ritual", price: "₹333", included: "Simple bay leaf ritual for clear intention setting" },
     ],
     "face reading & name": [
       { time: "Face Reading", price: "₹599", included: "20 Minutes Face Reading session telling about person's nature and more..." },

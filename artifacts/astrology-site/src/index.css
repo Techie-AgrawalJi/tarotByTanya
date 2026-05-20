@@ -162,3 +162,43 @@
 .glowing-border:hover {
   @apply border-primary shadow-[0_0_15px_rgba(201,168,76,0.5)];
 }
+
+/* Ensure interactive elements show pointer cursor for better affordance */
+button,
+a,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+.btn,
+.link,
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* ensure disabled buttons show not-allowed */
+button:disabled,
+input[disabled] {
+  cursor: not-allowed;
+}
+
+/* Candles background */
+.candles-wrapper { }
+.candles-left, .candles-right { position: absolute; top: 50%; transform: translateY(-50%); }
+.candles-left { left: 2rem; display:flex; flex-direction:column; gap:1.2rem; }
+.candles-right { right: 2rem; display:flex; flex-direction:column; gap:1.2rem; }
+.candle { width: 18px; height: 70px; position: relative; }
+.candle.small { transform: scale(0.85); height: 58px; }
+.candle .wax { position:absolute; bottom:0; left:0; right:0; height:70%; background: linear-gradient(180deg,#f7e8d9,#d49f6a); border-radius:6px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.3); }
+.candle .flame { position:absolute; top:-8px; left:50%; transform:translateX(-50%); width:18px; height:28px; border-radius:50% 50% 40% 40% / 60% 60% 40% 40%; background: radial-gradient(circle at 40% 30%, #fff1a8 0%, #ffd26a 20%, #ff8a3d 55%, transparent 60%); filter: blur(0.2px); animation: flicker 1.6s infinite ease-in-out; opacity:0.95 }
+@keyframes flicker {
+  0% { transform: translateX(-50%) scale(1) translateY(0); opacity:0.95 }
+  20% { transform: translateX(-52%) scale(1.05) translateY(-2px); opacity:1 }
+  40% { transform: translateX(-48%) scale(0.98) translateY(0); opacity:0.9 }
+  60% { transform: translateX(-50%) scale(1.02) translateY(-1px); opacity:1 }
+  80% { transform: translateX(-51%) scale(0.99) translateY(0); opacity:0.95 }
+  100% { transform: translateX(-50%) scale(1) translateY(0); opacity:0.95 }
+}
+
+/* subtle glow under the candles */
+.candle::after { content: ""; position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); width:40px; height:8px; background: radial-gradient(closest-side, rgba(255,150,60,0.08), transparent); border-radius:50%; }
+

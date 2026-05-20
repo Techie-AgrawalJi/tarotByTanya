@@ -4,6 +4,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Sparkles, CheckCircle2, X } from "lucide-react";
+import { 
+  getSessionDurationFromService, 
+  canFitSession, 
+  createBooking,
+  formatSessionSummary,
+  BookedSession,
+  getAvailableSlots,
+  getNextAvailableStartForBlock,
+  timeToMinutes,
+} from "@/lib/slotManager";
+import { getBookings, addBooking, subscribe } from "@/lib/bookingsStore";
+import { Timeline, TimelineCompact } from "@/components/Timeline";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -43,10 +55,11 @@ const servicePackages: Record<string, { time: string; price: string }[]> = {
     { time: "Premium Package", price: "₹3,499" },
   ],
   "manifestation rituals": [
-    { time: "Single Ritual", price: "₹799" },
-    { time: "30-Day Program", price: "₹2,499" },
-    { time: "Quarterly Plan", price: "₹5,999" },
-    { time: "Annual Alignment", price: "₹9,999" },
+    { time: "St. Expedite Ritual for Wish Fulfillment", price: "₹7,100" },
+    { time: "Goddess Aphrodite Ritual (for Beauty)", price: "₹7,100" },
+    { time: "Nitika Ritual for Wealth", price: "₹3,300" },
+    { time: "King Clauneck Ritual", price: "₹7,100" },
+    { time: "Bay Leaf Manifestation Ritual", price: "₹333" },
   ],
   "face reading & name": [
     { time: "Face Reading", price: "₹699" },
@@ -71,6 +84,29 @@ export function Booking() {
   const [selectedService, setSelectedService] = useState("");
   const [isDurationOpen, setIsDurationOpen] = useState(false);
   const durationMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isMaritalOpen, setIsMaritalOpen] = useState(false);
+  const maritalMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedMarital, setSelectedMarital] = useState("");
+  const [isGenderOpen, setIsGenderOpen] = useState(false);
+  const genderMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedGender, setSelectedGender] = useState("");
+  const [isServiceOpen, setIsServiceOpen] = useState(false);
+  const serviceMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isTimeslotOpen, setIsTimeslotOpen] = useState(false);
+  const timeslotMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedTimeslot, setSelectedTimeslot] = useState("");
+  
+  // Slot management state (for Tarot sessions)
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [sessionSummary, setSessionSummary] = useState("");
+  // Bookings driven by shared in-memory store so Admin can access them
+  const [bookings, setBookingsState] = useState<BookedSession[]>(() => getBookings());
+
+  useEffect(() => {
+    const unsub = subscribe((bks) => setBookingsState(bks));
+    return unsub;
+  }, []);
 
   const styleTag = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
@@ -86,24 +122,65 @@ export function Booking() {
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      const response = await fetch("https://formspree.io/f/xpwrgekg", {
+      // For Tarot sessions, include slot timing data
+      let bookingData: any = {
+        ...data,
+        _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`
+      };
+
+      if (data.service.toLowerCase() === "tarot" && selectedSlot) {
+        const durationMinutes = getSessionDurationFromService(data.duration);
+        const result = canFitSession(selectedSlot, durationMinutes, bookings, selectedDate);
+        bookingData.slotTiming = {
+          date: selectedDate,
+          startTime: selectedSlot,
+          endTime: result.endTime,
+          bufferEndTime: result.bufferEndTime,
+          durationMinutes,
+          sessionSummary,
+        };
+      }
+
+      // send to local API (falls back to http://localhost:3000)
+      const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+      const response = await fetch(`${API_BASE}/api/bookings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: JSON.stringify({
-          ...data,
-          _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`
-        })
+        body: JSON.stringify(bookingData)
       });
 
-      if (response.ok) {
+      const respJson = await response.json().catch(() => null);
+
+      if (response.ok && respJson && respJson.booking) {
+        // Add the booking to the frontend store for real-time updates
+        const serverBooking = respJson.booking as any;
+        const newBooking: BookedSession = {
+          id: serverBooking.id,
+          clientName: serverBooking.clientName || data.name,
+          clientPhone: serverBooking.clientPhone || data.phone || data.whatsapp,
+          startTime: serverBooking.startTime || selectedSlot,
+          endTime: serverBooking.endTime || selectedSlot,
+          bufferEndTime: serverBooking.bufferEndTime || selectedSlot,
+          durationMinutes: serverBooking.durationMinutes || getSessionDurationFromService(data.duration),
+          sessionType: serverBooking.sessionType || "tarot",
+          status: serverBooking.status || "BOOKED",
+          bookingTime: serverBooking.bookingTime || new Date().toISOString(),
+        };
+
+        addBooking(newBooking);
+
         setSubmittedName(data.name);
         setShowSuccess(true);
         reset();
         setSelectedService("");
+        setSelectedSlot("");
+        setSelectedDate("");
+        setSessionSummary("");
       } else {
+        console.error(respJson);
         alert("There was a problem submitting your request. Please try again.");
       }
     } catch (err) {
@@ -120,6 +197,10 @@ export function Booking() {
     setValue("service", nextService, { shouldValidate: true, shouldDirty: true });
     setValue("duration", "", { shouldValidate: true, shouldDirty: true });
     setIsDurationOpen(false);
+    // Reset slot and date when service changes
+    setSelectedSlot("");
+    setSelectedDate("");
+    setSessionSummary("");
   };
 
   const currentPackages = watchedService ? servicePackages[watchedService.toLowerCase()] : [];
@@ -130,6 +211,18 @@ export function Booking() {
       if (durationMenuRef.current && !durationMenuRef.current.contains(event.target as Node)) {
         setIsDurationOpen(false);
       }
+      if (maritalMenuRef.current && !maritalMenuRef.current.contains(event.target as Node)) {
+        setIsMaritalOpen(false);
+      }
+      if (genderMenuRef.current && !genderMenuRef.current.contains(event.target as Node)) {
+        setIsGenderOpen(false);
+      }
+      if (serviceMenuRef.current && !serviceMenuRef.current.contains(event.target as Node)) {
+        setIsServiceOpen(false);
+      }
+      if (timeslotMenuRef.current && !timeslotMenuRef.current.contains(event.target as Node)) {
+        setIsTimeslotOpen(false);
+      }
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
@@ -138,6 +231,25 @@ export function Booking() {
       window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, []);
+
+  // Update session summary when slot or duration changes
+  useEffect(() => {
+    if (
+      selectedSlot &&
+      selectedDate &&
+      watchedService &&
+      watchedService.toLowerCase() === "tarot" &&
+      watch("duration")
+    ) {
+      const durationMinutes = getSessionDurationFromService(watch("duration"));
+      const result = canFitSession(selectedSlot, durationMinutes, bookings, selectedDate);
+      if (result.canFit) {
+        setSessionSummary(
+          `Your session: ${selectedSlot} – ${result.endTime}\nNext slot after you: ${result.bufferEndTime}`
+        );
+      }
+    }
+  }, [selectedSlot, watch("duration"), selectedDate, watchedService]);
 
   return (
     <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
@@ -214,34 +326,84 @@ export function Booking() {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Gender</label>
-                <select 
-                  {...register("gender")}
-                  data-testid="select-gender"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
-                >
-                  <option value="">Select gender...</option>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
-                </select>
+                <div className="relative" ref={genderMenuRef}>
+                  <input type="hidden" {...register("gender")} />
+                  <button
+                    type="button"
+                    data-testid="select-gender"
+                    aria-expanded={isGenderOpen}
+                    onClick={() => setIsGenderOpen((open) => !open)}
+                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  >
+                    <span className={selectedGender ? "text-white" : "text-white/50"}>{selectedGender || "Select gender..."}</span>
+                    <span className="text-primary/60" />
+                  </button>
+
+                  {isGenderOpen && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                      <div className="py-2">
+                        {["Female", "Male", "Other", "Prefer not to say"].map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGender(opt);
+                              setValue("gender", opt, { shouldValidate: true, shouldDirty: true });
+                              setIsGenderOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                          >
+                            <span className="text-sm sm:text-base text-white">{opt}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {errors.gender && <p className="text-destructive text-sm mt-1">{errors.gender.message}</p>}
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Marital Status</label>
-                <select 
-                  {...register("maritalStatus")}
-                  data-testid="select-marital-status"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
-                >
-                  <option value="">Select marital status...</option>
-                  <option value="Single">Single</option>
-                  <option value="Married">Married</option>
-                  <option value="Divorced">Divorced</option>
-                  <option value="Widowed">Widowed</option>
-                  <option value="Separated">Separated</option>
-                </select>
+                <div className="relative" ref={maritalMenuRef}>
+                  <button
+                    type="button"
+                    data-testid="select-marital-status"
+                    aria-expanded={isMaritalOpen}
+                    onClick={() => setIsMaritalOpen((open) => !open)}
+                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  >
+                    <span className={selectedMarital ? "text-white" : "text-white/50"}>{selectedMarital || "Select marital status..."}</span>
+                    <span className="text-primary/60">{selectedMarital ? "" : ""}</span>
+                  </button>
+
+                  {isMaritalOpen && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                      <div className="py-2">
+                        {[
+                          "Single",
+                          "Married",
+                          "Divorced",
+                          "Widowed",
+                          "Separated",
+                        ].map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMarital(option);
+                              setValue("maritalStatus", option, { shouldValidate: true, shouldDirty: true });
+                              setIsMaritalOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                          >
+                            <span className="text-sm sm:text-base text-white">{option}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {errors.maritalStatus && <p className="text-destructive text-sm mt-1">{errors.maritalStatus.message}</p>}
               </div>
 
@@ -270,18 +432,48 @@ export function Booking() {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Service Type</label>
-                <select 
-                  {...register("service")}
-                  onChange={handleServiceChange}
-                  data-testid="select-service"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
-                >
-                  <option value="">Select a service...</option>
-                  <option value="Tarot">Tarot Reading</option>
-                  <option value="Spell Casting & Healer">Spell Casting & Healer</option>
-                  <option value="Manifestation Rituals">Manifestation Rituals</option>
-                  <option value="Face Reading & Name">Face Reading & Name Correction</option>
-                </select>
+                <div className="relative" ref={serviceMenuRef}>
+                  <input type="hidden" {...register("service")} />
+                  <button
+                    type="button"
+                    data-testid="select-service"
+                    aria-expanded={isServiceOpen}
+                    onClick={() => setIsServiceOpen((open) => !open)}
+                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  >
+                    <span className={selectedService ? "text-white" : "text-white/50"}>{selectedService || "Select a service..."}</span>
+                    <span className="text-primary/60" />
+                  </button>
+
+                  {isServiceOpen && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                      <div className="py-2">
+                        {[
+                          { value: "Tarot", label: "Tarot Reading" },
+                          { value: "Spell Casting & Healer", label: "Spell Casting & Healer" },
+                          { value: "Manifestation Rituals", label: "Manifestation Rituals" },
+                          { value: "Face Reading & Name", label: "Face Reading & Name Correction" },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              setSelectedService(opt.value);
+                              setValue("service", opt.value, { shouldValidate: true, shouldDirty: true });
+                              // reset duration when service changes
+                              setValue("duration", "", { shouldValidate: true, shouldDirty: true });
+                              setIsDurationOpen(false);
+                              setIsServiceOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                          >
+                            <span className="text-sm sm:text-base text-white">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {errors.service && <p className="text-destructive text-sm mt-1">{errors.service.message}</p>}
               </div>
 
@@ -324,7 +516,7 @@ export function Booking() {
                               }`}
                             >
                               <span className="text-sm sm:text-base text-white">{pkg.time}</span>
-                              <span className="text-sm sm:text-base font-semibold text-[#ffd86b] whitespace-nowrap">{pkg.price}</span>
+                              <span className="text-sm sm:text-base font-semibold text-white/70 whitespace-nowrap">{pkg.price}</span>
                             </button>
                           );
                         })}
@@ -335,6 +527,7 @@ export function Booking() {
                 {errors.duration && <p className="text-destructive text-sm mt-1">{errors.duration.message}</p>}
               </div>
 
+              {/* Preferred Date + Timeline for Tarot */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Date</label>
                 <input 
@@ -342,25 +535,119 @@ export function Booking() {
                   type="date"
                   min={new Date().toISOString().split("T")[0]}
                   data-testid="input-date"
+                  onChange={(e) => {
+                    setValue("date", e.target.value, { shouldValidate: true, shouldDirty: true });
+                    setSelectedDate(e.target.value);
+                    setSelectedSlot(""); // Reset slot when date changes
+                  }}
                   className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
                 {errors.date && <p className="text-destructive text-sm mt-1">{errors.date.message}</p>}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Time Slot</label>
-                <select 
-                  {...register("timeslot")}
-                  data-testid="select-timeslot"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
-                >
-                  <option value="">Select time slot...</option>
-                  <option value="Morning">Morning (9am - 12pm)</option>
-                  <option value="Afternoon">Afternoon (1pm - 5pm)</option>
-                  <option value="Evening">Evening (6pm - 9pm)</option>
-                </select>
-                {errors.timeslot && <p className="text-destructive text-sm mt-1">{errors.timeslot.message}</p>}
-              </div>
+              {/* Timeline for Tarot Sessions */}
+                          {watchedService && watchedService.toLowerCase() === "tarot" && watch("duration") && (
+                            <div className="md:col-span-2 space-y-4">
+                              <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Choose Time Block</label>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {(["MORNING", "AFTERNOON", "EVENING"] as const).map((blockKey) => {
+                                  const durationMinutes = getSessionDurationFromService(watch("duration"));
+                                  const blockInfo = getNextAvailableStartForBlock(selectedDate, bookings, durationMinutes, blockKey as any);
+
+                                  return (
+                                    <div key={blockKey} className={`p-4 rounded-xl border ${blockInfo.canFit ? "border-primary/30 bg-white/3" : "border-white/10 bg-white/5"}`}>
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <div className="text-sm font-semibold text-white">{blockKey === "MORNING" ? "Morning (9am - 12pm)" : blockKey === "AFTERNOON" ? "Afternoon (2pm - 5pm)" : "Evening (7pm - 11pm)"}</div>
+                                          <div className="text-xs text-white/70 mt-1">{blockInfo.canFit ? `Next available: ${blockInfo.startTime}` : blockInfo.reason}</div>
+                                        </div>
+                                        <div>
+                                          {blockInfo.canFit ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                // select this block's next available start
+                                                setSelectedSlot(blockInfo.startTime || "");
+                                                setValue("timeslot", blockInfo.startTime || "", { shouldValidate: true, shouldDirty: true });
+                                                const fakeBooking: BookedSession = {
+                                                  id: `preview_${Date.now()}`,
+                                                  clientName: "",
+                                                  clientPhone: "",
+                                                  startTime: blockInfo.startTime || "",
+                                                  endTime: blockInfo.endTime || "",
+                                                  bufferEndTime: blockInfo.bufferEndTime || "",
+                                                  durationMinutes,
+                                                  sessionType: "tarot",
+                                                  status: "HELD",
+                                                };
+                                                setSessionSummary(formatSessionSummary(fakeBooking));
+                                              }}
+                                              className="px-3 py-2 rounded-full bg-primary text-primary-foreground text-sm"
+                                            >
+                                              Book Next
+                                            </button>
+                                          ) : (
+                                            <button type="button" disabled className="px-3 py-2 rounded-full bg-white/5 text-white/60 text-sm">Not Available</button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Session Summary */}
+                              {sessionSummary && (
+                                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 mt-4">
+                                  <p className="text-sm text-white whitespace-pre-wrap font-light">
+                                    {sessionSummary}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+              {/* Fallback: Preferred Time Slot for non-Tarot services */}
+              {watchedService && watchedService.toLowerCase() !== "tarot" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Time Slot</label>
+                  <div className="relative" ref={timeslotMenuRef}>
+                    <input type="hidden" {...register("timeslot")} />
+                    <button
+                      type="button"
+                      data-testid="select-timeslot"
+                      aria-expanded={isTimeslotOpen}
+                      onClick={() => setIsTimeslotOpen((open) => !open)}
+                      className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    >
+                      <span className={selectedTimeslot ? "text-white" : "text-white/50"}>{selectedTimeslot || "Select time slot..."}</span>
+                      <span className="text-primary/60" />
+                    </button>
+
+                    {isTimeslotOpen && (
+                      <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                        <div className="py-2">
+                          {[{ value: "Morning", label: "Morning (9am - 12pm)" }, { value: "Afternoon", label: "Afternoon (1pm - 5pm)" }, { value: "Evening", label: "Evening (6pm - 9pm)" }].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setSelectedTimeslot(opt.value);
+                                setValue("timeslot", opt.value, { shouldValidate: true, shouldDirty: true });
+                                setIsTimeslotOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                            >
+                              <span className="text-sm sm:text-base text-white">{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {errors.timeslot && <p className="text-destructive text-sm mt-1">{errors.timeslot.message}</p>}
+                </div>
+              )}
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "booking_1779270442976",
+    "clientName": "Persistent User",
+    "clientPhone": "+91 90000 11111",
+    "startTime": "9:00 AM",
+    "endTime": "9:30 AM",
+    "bufferEndTime": "9:40 AM",
+    "durationMinutes": 30,
+    "sessionType": "tarot",
+    "status": "BOOKED",
+    "bookingTime": "2026-05-20T09:47:22.976Z",
+    "raw": {
+      "name": "Persistent User",
+      "phone": "+91 90000 11111",
+      "dob": "1990-01-01",
+      "placeOfBirth": "Mumbai",
+      "gender": "Female",
+      "maritalStatus": "Single",
+      "occupation": "Engineer",
+      "email": "persistent@example.com",
+      "service": "Tarot",
+      "duration": "Chat Session - 30 Minutes",
+      "date": "2026-05-23",
+      "timeslot": "9:00 AM",
+      "message": "",
+      "_subject": "New Booking Request — Tarot Chat Session - 30 Minutes — Persistent User",
+      "slotTiming": {
+        "date": "2026-05-23",
+        "startTime": "9:00 AM",
+        "endTime": "9:30 AM",
+        "bufferEndTime": "9:40 AM",
+        "durationMinutes": 30,
+        "sessionSummary": "Your session: 9:00 AM – 9:30 AM\nNext slot after you: 9:40 AM"
+      }
+    }
+  }
+]
