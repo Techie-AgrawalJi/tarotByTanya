@@ -646,5 +646,61 @@
       "receipt": "booking_1779367112313",
       "status": "created"
     }
+  },
+  {
+    "id": "pay_1779368068070_4844",
+    "orderId": "order_Ss1NtBRrTSoWlp",
+    "amount": 100,
+    "currency": "INR",
+    "receipt": "booking_1779368067616",
+    "status": "PAID",
+    "payload": {
+      "name": "jay agrawal",
+      "phone": "7534887015",
+      "dob": "2003-02-28",
+      "birthLocation": "agra, UP, India",
+      "presentCountry": "United States",
+      "gender": "Male",
+      "maritalStatus": "Single",
+      "occupation": "student",
+      "email": "2802jayagrawal@gmail.com",
+      "service": "Tarot",
+      "duration": "Chat Session - 20 Minutes",
+      "date": "2026-05-22",
+      "message": "",
+      "_subject": "New Booking Request — Tarot Chat Session - 20 Minutes — jay agrawal",
+      "paymentGateway": "razorpay",
+      "slotTiming": {
+        "date": "2026-05-22",
+        "startTime": "7:00 PM",
+        "endTime": "7:20 PM",
+        "bufferEndTime": "7:30 PM",
+        "durationMinutes": 20,
+        "sessionSummary": "Your session: 7:00 PM – 7:20 PM\nNext slot after you: 7:30 PM"
+      },
+      "paymentAmount": 1,
+      "paymentStatus": "PENDING"
+    },
+    "description": "Tarot - Chat Session - 20 Minutes",
+    "gateway": "razorpay",
+    "createdAt": "2026-05-21T12:54:28.075Z",
+    "gatewayResponse": {
+      "amount": 100,
+      "amount_due": 100,
+      "amount_paid": 0,
+      "attempts": 0,
+      "created_at": 1779368067,
+      "currency": "INR",
+      "entity": "order",
+      "id": "order_Ss1NtBRrTSoWlp",
+      "notes": [],
+      "offer_id": null,
+      "receipt": "booking_1779368067616",
+      "status": "created"
+    },
+    "razorpayOrderId": "order_Ss1NtBRrTSoWlp",
+    "razorpayPaymentId": "pay_Ss1P3AstTX56L0",
+    "razorpaySignature": "899ef213bc03b5b405458a243d30c67bb8724bb763dfbed580bfa001365d0f0f",
+    "updatedAt": "2026-05-21T12:55:48.493Z"
   }
 ]

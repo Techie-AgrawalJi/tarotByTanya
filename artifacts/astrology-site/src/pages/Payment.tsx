@@ -56,6 +56,12 @@ function getApiBaseUrl() {
   return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
 }
 
+function getAppUrl(pathname = "/") {
+  const basePath = String(import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
+  const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return `${window.location.origin}${basePath}${normalizedPath === "/" ? "/" : normalizedPath}`;
+}
+
 function getRazorpayKeyId() {
   return String((import.meta as any).env.VITE_RAZORPAY_KEY_ID || "").trim();
 }
@@ -113,7 +119,7 @@ export default function Payment() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
   function goHome() {
-    window.location.replace("/");
+    window.location.replace(getAppUrl("/"));
   }
 
   useEffect(() => {
@@ -170,7 +176,7 @@ export default function Payment() {
         order_id: String(createOrderJson.order_id),
         name: "Tarot By Tanya",
         description: `${draft?.serviceLabel || "Booking"} - ${draft?.durationLabel || "Package"}`,
-        callback_url: `${API_BASE}/api/verify-payment?returnUrl=${encodeURIComponent(`${window.location.origin}/payment`)}`,
+        callback_url: `${API_BASE}/api/verify-payment?returnUrl=${encodeURIComponent(getAppUrl("/payment"))}`,
         redirect: true,
         prefill: {
           name: String(draft?.payload.name || ""),

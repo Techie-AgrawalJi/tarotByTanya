@@ -15,6 +15,10 @@ import Candles from "../components/Candles";
 const ADMIN_EMAIL = (import.meta as any).env.VITE_ADMIN_EMAIL || "admin@example.com";
 const ADMIN_PASSWORD = (import.meta as any).env.VITE_ADMIN_PASSWORD || "password123";
 
+function getApiBaseUrl() {
+  return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
+}
+
 export default function Admin() {
   const [isAuthenticated, setAuthenticated] = useState<boolean>(
     () => !!localStorage.getItem("admin_token"),
@@ -25,7 +29,7 @@ export default function Admin() {
   const [bookings, setBookings] = useState<BookedSession[]>([]);
 
   function loadBookingsFromServer() {
-    const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+    const API_BASE = getApiBaseUrl();
 
     return fetch(`${API_BASE}/api/bookings`)
       .then((response) => response.json())
@@ -185,7 +189,7 @@ export default function Admin() {
             <button
               onClick={async () => {
                 if (!confirm("Clear all bookings?")) return;
-                const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+                const API_BASE = getApiBaseUrl();
                 try {
                   const response = await fetch(`${API_BASE}/api/bookings`, {
                     method: "DELETE",
@@ -251,7 +255,6 @@ export default function Admin() {
                         {booking.status !== "COMPLETED" ? (
                           <button
                             onClick={async () => {
-                              const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
                               try {
                                 const payload = {
                                   status: "COMPLETED",
@@ -259,7 +262,7 @@ export default function Admin() {
                                   actualEndTime: new Date().toISOString(),
                                 } as any;
 
-                                const response = await fetch(`${API_BASE}/api/bookings/${booking.id}`, {
+                                const response = await fetch(`${getApiBaseUrl()}/api/bookings/${booking.id}`, {
                                   method: "PATCH",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify(payload),
@@ -305,9 +308,8 @@ export default function Admin() {
                         <button
                           onClick={async () => {
                             if (!confirm("Delete this booking?")) return;
-                            const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
                             try {
-                              const response = await fetch(`${API_BASE}/api/bookings/${booking.id}`, {
+                              const response = await fetch(`${getApiBaseUrl()}/api/bookings/${booking.id}`, {
                                 method: "DELETE",
                               });
                               const json = await response.json();
