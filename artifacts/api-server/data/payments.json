@@ -31,5 +31,38 @@
     },
     "description": "Tarot - Chat Session - 20 Minutes",
     "createdAt": "2026-05-21T06:09:34.709Z"
+  },
+  {
+    "id": "pay_1779352824413_6317",
+    "amount": 499,
+    "currency": "INR",
+    "status": "PENDING",
+    "payload": {
+      "name": "jay agrawal",
+      "phone": "7894561237",
+      "dob": "2003-02-28",
+      "placeOfBirth": "agra",
+      "gender": "Male",
+      "maritalStatus": "Single",
+      "occupation": "student",
+      "email": "2802jayagr@gmail.com",
+      "service": "Tarot",
+      "duration": "Chat Session - 20 Minutes",
+      "date": "2026-05-22",
+      "message": "",
+      "_subject": "New Booking Request — Tarot Chat Session - 20 Minutes — jay agrawal",
+      "slotTiming": {
+        "date": "2026-05-22",
+        "startTime": "9:00 AM",
+        "endTime": "9:20 AM",
+        "bufferEndTime": "9:30 AM",
+        "durationMinutes": 20,
+        "sessionSummary": "Your session: 9:00 AM – 9:20 AM\nNext slot after you: 9:30 AM"
+      },
+      "paymentAmount": 499,
+      "paymentStatus": "PENDING"
+    },
+    "description": "Tarot - Chat Session - 20 Minutes",
+    "createdAt": "2026-05-21T08:40:24.419Z"
   }
 ]
