@@ -17,13 +17,79 @@ import {
 } from "@/lib/slotManager";
 import { getBookings, addBooking, subscribe } from "@/lib/bookingsStore";
 import { Timeline, TimelineCompact } from "@/components/Timeline";
-import { loadBookingDraft, parsePriceLabel, saveBookingDraft } from "@/lib/bookingCheckout";
+import { loadBookingDraft, parsePriceLabel, resolvePaymentGateway, saveBookingDraft } from "@/lib/bookingCheckout";
+
+const COUNTRY_OPTIONS = [
+  "India",
+  "United States",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "New Zealand",
+  "United Arab Emirates",
+  "Singapore",
+  "Malaysia",
+  "Saudi Arabia",
+  "Qatar",
+  "Oman",
+  "Kuwait",
+  "Bahrain",
+  "Pakistan",
+  "Bangladesh",
+  "Sri Lanka",
+  "Nepal",
+  "Bhutan",
+  "Afghanistan",
+  "United Arab Emirates",
+  "South Africa",
+  "Nigeria",
+  "Kenya",
+  "Egypt",
+  "Germany",
+  "France",
+  "Italy",
+  "Spain",
+  "Netherlands",
+  "Belgium",
+  "Switzerland",
+  "Austria",
+  "Sweden",
+  "Norway",
+  "Denmark",
+  "Finland",
+  "Ireland",
+  "Portugal",
+  "Greece",
+  "Turkey",
+  "Russia",
+  "Ukraine",
+  "Poland",
+  "Czech Republic",
+  "Romania",
+  "Hungary",
+  "Mexico",
+  "Brazil",
+  "Argentina",
+  "Chile",
+  "Colombia",
+  "Peru",
+  "Japan",
+  "South Korea",
+  "China",
+  "Hong Kong",
+  "Taiwan",
+  "Thailand",
+  "Vietnam",
+  "Philippines",
+  "Indonesia",
+].filter((value, index, list) => list.indexOf(value) === index);
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(10, "Valid WhatsApp number required"),
   dob: z.string().min(1, "Please enter your date of birth"),
-  placeOfBirth: z.string().min(2, "Please enter your place of birth"),
+  birthLocation: z.string().min(3, "Please enter your city, state, and country of birth"),
+  presentCountry: z.string().min(1, "Please select your present country"),
   gender: z.string().min(1, "Please select your gender"),
   maritalStatus: z.string().min(1, "Please select your marital status"),
   occupation: z.string().min(2, "Please enter your occupation"),
@@ -38,10 +104,10 @@ type FormData = z.infer<typeof formSchema>;
 
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
-    { time: "Chat Session - 20 Minutes", price: "₹499" },
+    { time: "Chat Session - 20 Minutes", price: "₹1" },
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
-    { time: "Video Call - 30 Minutes", price: "₹999" },
+    { time: "Video Call - 30 Minutes", price: "₹999" }, 
     { time: "Video Call - 1 Hour", price: "₹1,899" },
     { time: "Call - 15 Minutes", price: "₹399" },
     { time: "Call - 20 Minutes", price: "₹549" },
@@ -126,7 +192,18 @@ export function Booking() {
     if (typeof payload.name === "string") setValue("name", payload.name);
     if (typeof payload.phone === "string") setValue("phone", payload.phone);
     if (typeof payload.dob === "string") setValue("dob", payload.dob);
-    if (typeof payload.placeOfBirth === "string") setValue("placeOfBirth", payload.placeOfBirth);
+    if (typeof payload.birthLocation === "string") {
+      setValue("birthLocation", payload.birthLocation);
+    } else {
+      const legacyBirthParts = [payload.cityOfBirth, payload.stateOfBirth, payload.countryOfBirth].filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+      if (legacyBirthParts.length > 0) {
+        setValue("birthLocation", legacyBirthParts.join(", "));
+      } else if (typeof payload.placeOfBirth === "string") {
+        setValue("birthLocation", payload.placeOfBirth);
+      }
+    }
+    if (typeof payload.presentCountry === "string") setValue("presentCountry", payload.presentCountry);
+    if (typeof payload.country === "string" && typeof payload.presentCountry !== "string") setValue("presentCountry", payload.country);
     if (typeof payload.gender === "string") setValue("gender", payload.gender);
     if (typeof payload.maritalStatus === "string") setValue("maritalStatus", payload.maritalStatus);
     if (typeof payload.occupation === "string") setValue("occupation", payload.occupation);
@@ -147,7 +224,7 @@ export function Booking() {
     setIsSubmitting(true);
     try {
       if (!selectedDuration) {
-        alert("Please select a package before continuing to SMEpay.");
+        alert("Please select a package before continuing to payment.");
         return;
       }
 
@@ -157,10 +234,13 @@ export function Booking() {
         return;
       }
 
+      const paymentGateway = resolvePaymentGateway(data.presentCountry);
+
       // For Tarot sessions, include slot timing data
       let bookingData: any = {
         ...data,
-        _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`
+        _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`,
+        paymentGateway,
       };
 
       if (data.service.toLowerCase() === "tarot" && selectedSlot) {
@@ -181,12 +261,14 @@ export function Booking() {
           ...bookingData,
           paymentAmount: amount,
           paymentStatus: "PENDING",
+          presentCountry: data.presentCountry,
         },
         amount,
         amountLabel: selectedDuration.price,
         serviceLabel: data.service,
         durationLabel: data.duration,
         createdAt: new Date().toISOString(),
+        paymentGateway,
         slotTiming: bookingData.slotTiming,
       });
 
@@ -319,14 +401,29 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Place of Birth</label>
-                <input 
-                  {...register("placeOfBirth")}
-                  data-testid="input-place-of-birth"
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Birth Place</label>
+                <input
+                  {...register("birthLocation")}
+                  data-testid="input-birth-location"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="City, State, Country"
+                  placeholder="City, State, Country of Birth"
                 />
-                {errors.placeOfBirth && <p className="text-destructive text-sm mt-1">{errors.placeOfBirth.message}</p>}
+                {errors.birthLocation && <p className="text-destructive text-sm mt-1">{errors.birthLocation.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Present Country</label>
+                <select
+                  {...register("presentCountry")}
+                  data-testid="select-present-country"
+                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                >
+                  <option value="">Select present country</option>
+                  {COUNTRY_OPTIONS.map((country) => (
+                    <option key={`present-${country}`} value={country}>{country}</option>
+                  ))}
+                </select>
+                {errors.presentCountry && <p className="text-destructive text-sm mt-1">{errors.presentCountry.message}</p>}
               </div>
 
               <div className="space-y-2">

@@ -63,7 +63,7 @@ export function Reviews() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedRating, setSelectedRating] = useState(5);
+  const [selectedRating, setSelectedRating] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -159,6 +159,12 @@ export function Reviews() {
 
     const formData = new FormData(event.currentTarget as HTMLFormElement);
     formData.set("rating", String(selectedRating));
+
+    if (selectedRating < 1) {
+      setFormError("Please select a rating before submitting your review.");
+      setIsSubmitting(false);
+      return;
+    }
     
     // Remove the default photos field and add selected files
     formData.delete("photos");
@@ -239,7 +245,7 @@ export function Reviews() {
 
       setFormSuccess("Thank you for sharing your experience. Your review has been added.");
       formEl.reset();
-      setSelectedRating(5);
+      setSelectedRating(0);
       setSelectedFiles([]);
       setSelectedPreviews([]);
     } catch (err) {
@@ -486,10 +492,10 @@ export function Reviews() {
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-light uppercase tracking-widest text-primary/70">Average Rating</span>
                 <div className="flex gap-0.5">
-                  {[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= Math.round(summary.averageRating || 5) ? "fill-primary text-primary" : "text-primary/20"}`} />)}
+                  {[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= Math.round(summary.averageRating ?? 0) ? "fill-primary text-primary" : "text-primary/20"}`} />)}
                 </div>
               </div>
-              <div className="heading-luxury text-3xl text-white">{summary.averageRating || "5.0"}</div>
+              <div className="heading-luxury text-3xl text-white">{summary.totalReviews > 0 ? (summary.averageRating ?? 0).toFixed(1) : "0"}</div>
               
               {/* Star distribution bar */}
               <div className="mt-4 space-y-1">

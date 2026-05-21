@@ -1,12 +1,57 @@
 import { Router } from "express";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
+import { readPayments } from "../lib/paymentsStore";
 
 const router = Router();
+
+async function hydrateBookingsFromPaidPayments() {
+  const [bookings, payments] = await Promise.all([readBookings(), readPayments()]);
+  let changed = false;
+
+  for (const payment of payments) {
+    if (payment.status !== "PAID") {
+      continue;
+    }
+
+    const paymentReference = payment.razorpayPaymentId || payment.reference || payment.id;
+    const alreadyExists = bookings.some((booking: { paymentReference?: string }) => booking.paymentReference === paymentReference);
+
+    if (alreadyExists) {
+      continue;
+    }
+
+    const payload = payment.payload || {};
+    bookings.push({
+      id: payload.id || `booking_${Date.now()}`,
+      clientName: payload.name || payload.clientName || "",
+      clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+      startTime: payload.slotTiming?.startTime || payload.startTime || "",
+      endTime: payload.slotTiming?.endTime || payload.endTime || "",
+      bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
+      durationMinutes: payload.slotTiming?.durationMinutes || payload.durationMinutes || 0,
+      sessionType: (payload.service || payload.sessionType || "").toString().toLowerCase(),
+      paymentMethod: payment.gateway === "razorpay" ? "Razorpay" : "SMEpay",
+      paymentAmount: payment.amount || 0,
+      paymentStatus: "PAID",
+      paymentReference,
+      status: "BOOKED",
+      bookingTime: payment.updatedAt || payment.createdAt || new Date().toISOString(),
+      raw: payload,
+    });
+    changed = true;
+  }
+
+  if (changed) {
+    await writeBookings(bookings);
+  }
+
+  return bookings;
+}
 
 // GET /api/bookings
 router.get("/bookings", async (req, res) => {
   try {
-    const bookings = await readBookings();
+    const bookings = await hydrateBookingsFromPaidPayments();
     res.json({ ok: true, bookings });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });

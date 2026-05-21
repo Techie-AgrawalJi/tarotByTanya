@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router } from "express";
 import { readPayments, writePayments, findPaymentById } from "../lib/paymentsStore";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
@@ -8,6 +9,221 @@ function makeId(prefix = "pay_") {
   return `${prefix}${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
 }
 
+function resolveGateway(input: unknown): "smepay" | "razorpay" {
+  const normalized = String(input ?? "").trim().toLowerCase();
+
+  if (!normalized) {
+    return "smepay";
+  }
+
+  if (normalized === "india" || normalized === "in" || normalized.includes("india") || normalized.includes("bharat")) {
+    return "smepay";
+  }
+
+  return "razorpay";
+}
+
+function getRazorpayCredentials() {
+  return {
+    keyId: process.env.RAZORPAY_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+  };
+}
+
+function toAmount(value: unknown) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount) : 0;
+}
+
+async function createBookingFromPayment(paymentRecord: any, paymentReference: string) {
+  const payload = paymentRecord.payload || {};
+  const bookings = await readBookings();
+  const existing = bookings.find((booking: any) => booking.paymentReference === paymentReference);
+
+  if (existing) {
+    return existing;
+  }
+
+  const booking = {
+    id: payload.id || `booking_${Date.now()}`,
+    clientName: payload.name || payload.clientName || "",
+    clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+    startTime: payload.slotTiming?.startTime || payload.startTime || "",
+    endTime: payload.slotTiming?.endTime || payload.endTime || "",
+    bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
+    durationMinutes: payload.slotTiming?.durationMinutes || payload.durationMinutes || 0,
+    sessionType: (payload.service || payload.sessionType || "").toString().toLowerCase(),
+    paymentMethod: paymentRecord.gateway === "razorpay" ? "Razorpay" : "SMEpay",
+    paymentAmount: paymentRecord.amount || 0,
+    paymentStatus: "PAID",
+    paymentReference,
+    status: "BOOKED",
+    bookingTime: new Date().toISOString(),
+    raw: payload,
+  };
+
+  bookings.push(booking);
+  await writeBookings(bookings);
+
+  return booking;
+}
+
+async function createRazorpayOrder(params: { amount: number; currency: string; receipt: string }) {
+  const { keyId, keySecret } = getRazorpayCredentials();
+
+  if (!keyId || !keySecret) {
+    const error = new Error("Razorpay credentials are not configured.") as Error & { statusCode?: number };
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: params.amount,
+      currency: params.currency,
+      receipt: params.receipt,
+    }),
+  });
+
+  const responseJson: any = await response.json().catch(() => null);
+
+  if (response.status === 401) {
+    const error = new Error("Razorpay authentication failed.") as Error & { statusCode?: number };
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      responseJson?.error?.description || responseJson?.error || "Unable to create Razorpay order.",
+    ) as Error & { statusCode?: number };
+    error.statusCode = 500;
+    throw error;
+  }
+
+  if (!responseJson?.id) {
+    const error = new Error("Razorpay order id was not returned.") as Error & { statusCode?: number };
+    error.statusCode = 500;
+    throw error;
+  }
+
+  return responseJson;
+}
+
+router.post("/create-order", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const payload = body.payload || {};
+    const amount = toAmount(body.amount ?? body.amountPaise ?? payload.amount);
+    const currency = String(body.currency || "INR").toUpperCase();
+    const receipt = String(body.receipt || body.paymentId || `receipt_${Date.now()}`);
+
+    if (!Number.isFinite(amount) || amount < 100) {
+      return res.status(400).json({ ok: false, error: "Amount must be at least 100 paise." });
+    }
+
+    const order: any = await createRazorpayOrder({ amount, currency, receipt });
+    const { keyId } = getRazorpayCredentials();
+
+    const paymentId = makeId();
+    const payments = await readPayments();
+
+    payments.push({
+      id: paymentId,
+      orderId: order.id,
+      amount,
+      currency,
+      receipt,
+      status: "PENDING",
+      payload,
+      description: String(body.description || `${payload.service || "booking"} ${payload.duration || ""}`),
+      gateway: "razorpay",
+      createdAt: new Date().toISOString(),
+      gatewayResponse: order,
+    });
+
+    await writePayments(payments);
+
+    return res.json({
+      ok: true,
+      order_id: order.id,
+      amount: order.amount || amount,
+      currency: order.currency || currency,
+      receipt,
+      payment_id: paymentId,
+      key_id: keyId,
+    });
+  } catch (err) {
+    const statusCode = typeof err === "object" && err && "statusCode" in err ? Number((err as { statusCode?: number }).statusCode) : 500;
+    return res.status(statusCode === 401 ? 401 : statusCode === 400 ? 400 : 500).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+router.post("/verify-payment", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const returnUrl = String(req.query.returnUrl || body.returnUrl || body.return_url || "");
+    const orderId = String(body.razorpay_order_id || body.order_id || "");
+    const paymentId = String(body.razorpay_payment_id || body.payment_id || "");
+    const signature = String(body.razorpay_signature || body.signature || "");
+
+    if (!orderId || !paymentId || !signature) {
+      return res.status(400).json({ ok: false, error: "Missing Razorpay payment fields." });
+    }
+
+    const { keySecret } = getRazorpayCredentials();
+    if (!keySecret) {
+      return res.status(500).json({ ok: false, error: "Razorpay credentials are not configured." });
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${orderId}|${paymentId}`)
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      return res.status(400).json({ ok: false, error: "Signature verification failed." });
+    }
+
+    const payments = await readPayments();
+    const index = payments.findIndex((entry: any) => entry.orderId === orderId || entry.id === String(body.payment_record_id || body.paymentId || ""));
+
+    if (index === -1) {
+      return res.status(404).json({ ok: false, error: "Payment record not found." });
+    }
+
+    payments[index].status = "PAID";
+    payments[index].razorpayOrderId = orderId;
+    payments[index].razorpayPaymentId = paymentId;
+    payments[index].razorpaySignature = signature;
+    payments[index].updatedAt = new Date().toISOString();
+
+    await writePayments(payments);
+
+    const booking = await createBookingFromPayment(payments[index], paymentId);
+
+    if (returnUrl) {
+      const url = new URL(returnUrl);
+      url.searchParams.set("payment_status", "success");
+      url.searchParams.set("payment_id", paymentId);
+      url.searchParams.set("order_id", orderId);
+      return res.redirect(303, url.toString());
+    }
+
+    return res.json({ ok: true, verified: true, payment: payments[index], booking });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Create a checkout session and return a checkout URL
 router.post("/payments/create-checkout", async (req, res) => {
   try {
@@ -15,6 +231,7 @@ router.post("/payments/create-checkout", async (req, res) => {
     const amount = Number(body.amount || (body.payload && body.payload.paymentAmount) || 0);
     const payload = body.payload || {};
     const description = String(body.description || `${payload.service || "booking"} ${payload.duration || ""}`);
+    const gateway = resolveGateway(body.gateway || payload.presentCountry || payload.country || body.presentCountry || body.country);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ ok: false, error: "Invalid amount" });
@@ -30,19 +247,26 @@ router.post("/payments/create-checkout", async (req, res) => {
       status: "PENDING",
       payload,
       description,
+      gateway,
       createdAt: new Date().toISOString(),
     };
 
     payments.push(newPayment);
     await writePayments(payments);
 
-    // Attempt server-side SMEpay session creation when credentials are present
-    const smepayCreateUrl = process.env.SMEPAY_CREATE_URL || process.env.SMEPAY_API_URL || "";
-    const smepayApiKey = process.env.SMEPAY_API_KEY || process.env.SMEPAY_SECRET || "";
+    const gatewayName = gateway === "razorpay" ? "Razorpay" : "SMEpay";
+    const createUrl =
+      gateway === "razorpay"
+        ? process.env.RAZORPAY_CREATE_URL || process.env.RAZORPAY_API_URL || ""
+        : process.env.SMEPAY_CREATE_URL || process.env.SMEPAY_API_URL || "";
+    const apiKey =
+      gateway === "razorpay"
+        ? process.env.RAZORPAY_API_KEY || process.env.RAZORPAY_SECRET || ""
+        : process.env.SMEPAY_API_KEY || process.env.SMEPAY_SECRET || "";
 
     let checkoutUrl = "";
 
-    if (smepayCreateUrl && smepayApiKey) {
+    if (createUrl && apiKey) {
       try {
         const createBody = {
           amount,
@@ -52,11 +276,11 @@ router.post("/payments/create-checkout", async (req, res) => {
           return_url: body.returnUrl || `${req.protocol}://${req.get("host")}/payment`,
         };
 
-        const resp = await fetch(smepayCreateUrl, {
+        const resp = await fetch(createUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${smepayApiKey}`,
+            Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify(createBody),
         });
@@ -67,6 +291,7 @@ router.post("/payments/create-checkout", async (req, res) => {
         const paymentsAfter = await readPayments();
         const idx = paymentsAfter.findIndex((p: any) => p.id === paymentId);
         if (idx !== -1) {
+          paymentsAfter[idx].gateway = gateway;
           paymentsAfter[idx].gatewayResponse = apiResp || null;
           await writePayments(paymentsAfter);
         }
@@ -81,9 +306,12 @@ router.post("/payments/create-checkout", async (req, res) => {
       }
     }
 
-    // Fallback: build checkout URL from SMEpay base configured in env
+    // Fallback: build checkout URL from the configured gateway base URL
     if (!checkoutUrl) {
-      const base = process.env.SMEPAY_CHECKOUT_URL || process.env.SMEPAY_BASE_URL || "";
+      const base =
+        gateway === "razorpay"
+          ? process.env.RAZORPAY_CHECKOUT_URL || process.env.RAZORPAY_BASE_URL || ""
+          : process.env.SMEPAY_CHECKOUT_URL || process.env.SMEPAY_BASE_URL || "";
       if (base) {
         try {
           const url = new URL(base);
@@ -100,7 +328,11 @@ router.post("/payments/create-checkout", async (req, res) => {
       }
     }
 
-    return res.json({ ok: true, paymentId, checkoutUrl });
+    if (!checkoutUrl) {
+      return res.status(500).json({ ok: false, error: `${gatewayName} checkout is not configured.` });
+    }
+
+    return res.json({ ok: true, paymentId, checkoutUrl, gateway });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
@@ -151,7 +383,7 @@ router.post("/payments/webhook", async (req, res) => {
         bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
         durationMinutes: payload.slotTiming?.durationMinutes || payload.durationMinutes || 0,
         sessionType: (payload.service || payload.sessionType || "").toString().toLowerCase(),
-        paymentMethod: "SMEpay",
+        paymentMethod: payments[index].gateway === "razorpay" ? "Razorpay" : "SMEpay",
         paymentAmount: payments[index].amount || 0,
         paymentStatus: "PAID",
         paymentReference: reference || payments[index].id,

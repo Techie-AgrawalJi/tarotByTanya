@@ -24,21 +24,36 @@ export default function Admin() {
   const [showPassword, setShowPassword] = useState(false);
   const [bookings, setBookings] = useState<BookedSession[]>([]);
 
-  useEffect(() => {
-    const unsub = subscribe((nextBookings) => setBookings(nextBookings));
-    return unsub;
-  }, []);
-
-  useEffect(() => {
+  function loadBookingsFromServer() {
     const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
-    fetch(`${API_BASE}/api/bookings`)
+
+    return fetch(`${API_BASE}/api/bookings`)
       .then((response) => response.json())
       .then((json) => {
         if (json && json.bookings) setBookings(json.bookings);
         else setBookings(getBookings());
       })
       .catch(() => setBookings(getBookings()));
+  }
+
+  useEffect(() => {
+    const unsub = subscribe((nextBookings) => setBookings(nextBookings));
+    return unsub;
   }, []);
+
+  useEffect(() => {
+    loadBookingsFromServer();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const intervalId = window.setInterval(() => {
+      loadBookingsFromServer();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isAuthenticated]);
 
   function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -179,6 +194,7 @@ export default function Admin() {
                   if (json.ok) {
                     clearBookings();
                     setBookings([]);
+                    loadBookingsFromServer();
                   } else {
                     alert("Failed to clear bookings");
                   }
@@ -263,6 +279,7 @@ export default function Admin() {
                                         : entry,
                                     ),
                                   );
+                                  loadBookingsFromServer();
                                 } else {
                                   alert("Failed to mark reading as completed");
                                 }
@@ -297,6 +314,7 @@ export default function Admin() {
                               if (json.ok) {
                                 removeBooking(booking.id);
                                 setBookings((current) => current.filter((entry) => entry.id !== booking.id));
+                                loadBookingsFromServer();
                               } else {
                                 alert("Failed to delete booking");
                               }

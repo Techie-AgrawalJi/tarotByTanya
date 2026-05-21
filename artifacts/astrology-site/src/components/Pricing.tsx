@@ -1,9 +1,13 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 export function Pricing() {
   const [activeTab, setActiveTab] = useState("tarot");
+  const [showAllTarotPrices, setShowAllTarotPrices] = useState(false);
+  const [isSmallScreen, setIsSmallScreen] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false));
 
   const tabs = ["Tarot", "Spell Casting & Healer", "Manifestation Rituals", "Face Reading & Name"];
 
@@ -24,6 +28,19 @@ export function Pricing() {
 
     return () => {
       window.removeEventListener("pricing-tab-change", handlePricingTabChange as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSmallScreen(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
@@ -64,6 +81,8 @@ export function Pricing() {
 
   const durations = durationsByTab[activeTab] ?? durationsByTab["tarot"];
   const isFaceReadingTab = activeTab === "face reading & name";
+  const isTarotTab = activeTab === "tarot";
+  const visibleDurations = isTarotTab && isSmallScreen && !showAllTarotPrices ? durations.slice(0, 5) : durations;
 
   return (
     <section id="pricing" data-testid="pricing-section" className="py-12 md:py-24 px-4 relative z-10 bg-[#0a0a1a]/50">
@@ -107,7 +126,7 @@ export function Pricing() {
           </div>
         )}
         <div className={isFaceReadingTab ? "flex flex-wrap justify-center gap-6" : "grid md:grid-cols-2 lg:grid-cols-4 gap-6"}>
-          {durations.map((pkg, i) => (
+          {visibleDurations.map((pkg, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 20 }}
@@ -132,6 +151,20 @@ export function Pricing() {
             </motion.div>
           ))}
         </div>
+
+        {isTarotTab && isSmallScreen && durations.length > visibleDurations.length && (
+          <div className="mt-8 flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAllTarotPrices((current) => !current)}
+              className="border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground"
+            >
+              {showAllTarotPrices ? "Show Fewer Tarot Prices" : "Show All Tarot Prices"}
+              <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${showAllTarotPrices ? "rotate-180" : ""}`} />
+            </Button>
+          </div>
+        )}
       </div>
     </section>
   );
