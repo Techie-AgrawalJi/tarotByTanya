@@ -22,6 +22,11 @@ export function updateBookingStatus(id: string, status: BookedSession["status"])
   subscribers.forEach((s) => s(getBookings()));
 }
 
+export function updateBooking(id: string, updates: Partial<BookedSession>) {
+  bookings = bookings.map((booking) => (booking.id === id ? { ...booking, ...updates } : booking));
+  subscribers.forEach((s) => s(getBookings()));
+}
+
 export function clearBookings() {
   bookings = [];
   subscribers.forEach((s) => s(getBookings()));

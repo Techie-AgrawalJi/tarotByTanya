@@ -6,6 +6,7 @@ import {
   getBookings,
   removeBooking,
   updateBookingStatus,
+  updateBooking,
   subscribe,
 } from "@/lib/bookingsStore";
 import { type BookedSession } from "@/lib/slotManager";
@@ -204,6 +205,8 @@ export default function Admin() {
                 <tr className="text-white/70">
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Booked At</th>
+                  <th className="px-3 py-2">Slot Date</th>
                   <th className="px-3 py-2">Service</th>
                   <th className="px-3 py-2">Start</th>
                   <th className="px-3 py-2">End</th>
@@ -214,9 +217,14 @@ export default function Admin() {
               </thead>
               <tbody>
                 {bookings.map((booking) => (
-                  <tr key={booking.id} className="border-t border-white/5">
-                    <td className="px-3 py-2 text-white">{booking.clientName}</td>
+                  <tr
+                    key={booking.id}
+                    className={`border-t border-white/5 ${booking.status === "COMPLETED" ? "line-through opacity-60" : ""}`}
+                  >
+                    <td className="px-3 py-2 text-white">{booking.fullName || booking.clientName || (booking as any).name || "-"}</td>
                     <td className="px-3 py-2 text-white/70">{booking.clientPhone}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.bookingTime ? new Date(booking.bookingTime).toLocaleString() : "-"}</td>
+                    <td className="px-3 py-2 text-white/70">{(booking as any).slotTiming?.date || booking.slotDate || "-"}</td>
                     <td className="px-3 py-2 text-white/70">{booking.sessionType}</td>
                     <td className="px-3 py-2 text-white/70">{booking.startTime}</td>
                     <td className="px-3 py-2 text-white/70">{booking.endTime}</td>
@@ -229,17 +237,30 @@ export default function Admin() {
                             onClick={async () => {
                               const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
                               try {
+                                const payload = {
+                                  status: "COMPLETED",
+                                  cutThrough: true,
+                                  actualEndTime: new Date().toISOString(),
+                                } as any;
+
                                 const response = await fetch(`${API_BASE}/api/bookings/${booking.id}`, {
                                   method: "PATCH",
                                   headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ status: "COMPLETED" }),
+                                  body: JSON.stringify(payload),
                                 });
                                 const json = await response.json();
-                                if (json.ok && json.booking) {
-                                  updateBookingStatus(booking.id, "COMPLETED");
+                                if (json.ok) {
+                                  // keep booking visible but mark as completed and record cut info
+                                  updateBooking(booking.id, {
+                                    status: "COMPLETED",
+                                    cutThrough: true,
+                                    actualEndTime: payload.actualEndTime,
+                                  });
                                   setBookings((current) =>
                                     current.map((entry) =>
-                                      entry.id === booking.id ? { ...entry, status: "COMPLETED" } : entry,
+                                      entry.id === booking.id
+                                        ? { ...entry, status: "COMPLETED", cutThrough: true, actualEndTime: payload.actualEndTime }
+                                        : entry,
                                     ),
                                   );
                                 } else {
@@ -254,9 +275,14 @@ export default function Admin() {
                             Mark Completed
                           </button>
                         ) : (
-                          <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200">
-                            Completed
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200">Completed</span>
+                            {booking.cutThrough ? (
+                              <span className="rounded bg-yellow-600/15 px-2 py-1 text-yellow-200 text-xs">
+                                Cut Through{booking.actualEndTime ? ` • ${new Date(booking.actualEndTime).toLocaleString()}` : ""}
+                              </span>
+                            ) : null}
+                          </div>
                         )}
 
                         <button

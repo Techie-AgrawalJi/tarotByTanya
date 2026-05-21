@@ -28,6 +28,13 @@ export interface BookedSession {
   paymentAmount?: number;
   paymentStatus?: "PENDING" | "PAID" | "FAILED";
   paymentReference?: string;
+  // Optional full name field for clarity and server compatibility
+  fullName?: string;
+  // Optional slot date (YYYY-MM-DD) when date is stored separately from startTime
+  slotDate?: string;
+  // If admin cuts the reading short, mark this and record actual end time
+  cutThrough?: boolean;
+  actualEndTime?: string; // ISO timestamp when the reading was cut/completed
 }
 
 export interface SlotOption {
