@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ArrowLeft, Eye, EyeOff, Mail } from "lucide-react";
 import {
   clearBookings,
+  addBooking,
   getBookings,
   removeBooking,
   updateBookingStatus,
@@ -30,12 +31,21 @@ export default function Admin() {
 
   function loadBookingsFromServer() {
     const API_BASE = getApiBaseUrl();
-
-    return fetch(`${API_BASE}/api/bookings`)
+    // Add cache-busting to avoid stale 304 responses from dev server
+    const url = `${API_BASE}/api/bookings?t=${Date.now()}`;
+    return fetch(url, { cache: 'no-store' })
       .then((response) => response.json())
       .then((json) => {
-        if (json && json.bookings) setBookings(json.bookings);
-        else setBookings(getBookings());
+        if (json && json.bookings) {
+          // keep the shared bookings store in sync so subscribers see the data
+          try {
+            clearBookings();
+            (json.bookings || []).forEach((b: any) => addBooking(b));
+          } catch (e) {
+            // ignore store update errors
+          }
+          setBookings(json.bookings);
+        } else setBookings(getBookings());
       })
       .catch(() => setBookings(getBookings()));
   }
@@ -236,15 +246,15 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((booking) => (
+                {bookings.map((booking, idx) => (
                   <tr
-                    key={booking.id}
+                    key={`${booking.id || 'booking'}-${idx}`}
                     className={`border-t border-white/5 ${booking.status === "COMPLETED" ? "line-through opacity-60" : ""}`}
                   >
-                    <td className="px-3 py-2 text-white">{booking.fullName || booking.clientName || (booking as any).name || "-"}</td>
-                    <td className="px-3 py-2 text-white/70">{booking.clientPhone}</td>
+                    <td className="px-3 py-2 text-white">{(booking as any).fullName || (booking as any).clientName || (booking as any).raw?.name || (booking as any).raw?.clientName || (booking as any).name || "-"}</td>
+                    <td className="px-3 py-2 text-white/70">{(booking as any).clientPhone || (booking as any).raw?.phone || (booking as any).raw?.clientPhone || (booking as any).whatsapp || "-"}</td>
                     <td className="px-3 py-2 text-white/70">{booking.bookingTime ? new Date(booking.bookingTime).toLocaleString() : "-"}</td>
-                    <td className="px-3 py-2 text-white/70">{(booking as any).slotTiming?.date || booking.slotDate || "-"}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.slotDate || (booking as any).raw?.slotTiming?.date || (booking as any).raw?.date || "-"}</td>
                     <td className="px-3 py-2 text-white/70">{booking.sessionType}</td>
                     <td className="px-3 py-2 text-white/70">{booking.startTime}</td>
                     <td className="px-3 py-2 text-white/70">{booking.endTime}</td>

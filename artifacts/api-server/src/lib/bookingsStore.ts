@@ -1,28 +1,32 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { getBookingModel } from "./mongoose";
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
-const BOOKINGS_FILE = path.join(DATA_DIR, "bookings.json");
+type BookingRecord = Record<string, any>;
 
-async function ensureDataDir() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
-    // ignore
-  }
+function normalizeBookingRecord(booking: BookingRecord): BookingRecord {
+  const slotDate = String(booking.slotDate || booking.raw?.slotTiming?.date || booking.raw?.date || "").trim();
+  const clientName = String(booking.clientName || booking.raw?.name || booking.raw?.clientName || booking.name || booking.fullName || "").trim();
+  const clientPhone = String(booking.clientPhone || booking.raw?.phone || booking.raw?.clientPhone || booking.raw?.whatsapp || booking.whatsapp || "").trim();
+
+  return {
+    ...booking,
+    slotDate,
+    clientName,
+    clientPhone,
+  };
 }
 
 export async function readBookings() {
-  await ensureDataDir();
-  try {
-    const raw = await fs.readFile(BOOKINGS_FILE, "utf-8");
-    return JSON.parse(raw || "[]");
-  } catch (err) {
-    return [];
-  }
+  const Booking = await getBookingModel();
+  const bookings = await Booking.find({}).sort({ bookingTime: 1, _id: 1 }).lean<BookingRecord>().exec();
+  return bookings.map(normalizeBookingRecord);
 }
 
-export async function writeBookings(bookings: any[]) {
-  await ensureDataDir();
-  await fs.writeFile(BOOKINGS_FILE, JSON.stringify(bookings, null, 2), "utf-8");
+export async function writeBookings(bookings: BookingRecord[]) {
+  const Booking = await getBookingModel();
+
+  await Booking.deleteMany({});
+
+  if (bookings.length > 0) {
+    await Booking.insertMany(bookings.map(normalizeBookingRecord), { ordered: true });
+  }
 }

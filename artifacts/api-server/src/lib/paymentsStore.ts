@@ -1,33 +1,33 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { getPaymentModel } from "./mongoose";
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
-const PAYMENTS_FILE = path.join(DATA_DIR, "payments.json");
-
-async function ensureDataDir() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
-    // ignore
-  }
-}
+type PaymentRecord = Record<string, any>;
 
 export async function readPayments() {
-  await ensureDataDir();
-  try {
-    const raw = await fs.readFile(PAYMENTS_FILE, "utf-8");
-    return JSON.parse(raw || "[]");
-  } catch (err) {
-    return [];
-  }
+  const Payment = await getPaymentModel();
+  return Payment.find({}).sort({ createdAt: 1, _id: 1 }).lean<PaymentRecord>().exec();
 }
 
-export async function writePayments(payments: any[]) {
-  await ensureDataDir();
-  await fs.writeFile(PAYMENTS_FILE, JSON.stringify(payments, null, 2), "utf-8");
+export async function writePayments(payments: PaymentRecord[]) {
+  const Payment = await getPaymentModel();
+
+  await Payment.deleteMany({});
+
+  if (payments.length > 0) {
+    await Payment.insertMany(payments, { ordered: true });
+  }
 }
 
 export async function findPaymentById(id: string) {
-  const payments = await readPayments();
-  return payments.find((p: any) => p.id === id) || null;
+  const Payment = await getPaymentModel();
+  return (
+    (await Payment.findOne({
+      $or: [
+        { id },
+        { orderId: id },
+        { razorpayPaymentId: id },
+        { "gatewayResponse.id": id },
+        { "gatewayResponse.order_id": id },
+      ],
+    }).lean<PaymentRecord>().exec()) || null
+  );
 }

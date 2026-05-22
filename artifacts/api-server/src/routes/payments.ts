@@ -48,6 +48,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentReference: st
     id: payload.id || `booking_${Date.now()}`,
     clientName: payload.name || payload.clientName || "",
     clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+      slotDate: payload.slotTiming?.date || payload.date || "", // Ensure slotDate is included
     startTime: payload.slotTiming?.startTime || payload.startTime || "",
     endTime: payload.slotTiming?.endTime || payload.endTime || "",
     bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
@@ -122,6 +123,7 @@ router.post("/create-order", async (req, res) => {
     const amount = toAmount(body.amount ?? body.amountPaise ?? payload.amount);
     const currency = String(body.currency || "INR").toUpperCase();
     const receipt = String(body.receipt || body.paymentId || `receipt_${Date.now()}`);
+    const paymentId = String(body.paymentId || body.payment_record_id || makeId()).trim() || makeId();
 
     if (!Number.isFinite(amount) || amount < 100) {
       return res.status(400).json({ ok: false, error: "Amount must be at least 100 paise." });
@@ -129,8 +131,6 @@ router.post("/create-order", async (req, res) => {
 
     const order: any = await createRazorpayOrder({ amount, currency, receipt });
     const { keyId } = getRazorpayCredentials();
-
-    const paymentId = makeId();
     const payments = await readPayments();
 
     payments.push({
@@ -141,7 +141,6 @@ router.post("/create-order", async (req, res) => {
       receipt,
       status: "PENDING",
       payload,
-      description: String(body.description || `${payload.service || "booking"} ${payload.duration || ""}`),
       gateway: "razorpay",
       createdAt: new Date().toISOString(),
       gatewayResponse: order,
@@ -208,12 +207,95 @@ router.post("/verify-payment", async (req, res) => {
 
     await writePayments(payments);
 
+    // Reservation/HELD handling: prefer claiming an existing HELD reservation created at checkout.
+    try {
+      const payload = payments[index].payload || {};
+      const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
+      const slotStart = String(payload.slotTiming?.startTime || payload.startTime || "").trim();
+
+      const HELD_TTL_MIN = Number(process.env.HELD_TTL_MINUTES) || 10;
+      const HELD_TTL_MS = HELD_TTL_MIN * 60 * 1000;
+
+      const bookings = await readBookings();
+
+      // Find a HELD reservation that matches this payment (preferred)
+      const heldByThis = bookings.find((b: any) => b.status === "HELD" && b.paymentReference === payments[index].id);
+
+      if (heldByThis) {
+        // Check expiry
+        const heldAt = heldByThis.heldAt ? new Date(heldByThis.heldAt).getTime() : 0;
+        if (!heldAt || Date.now() - heldAt <= HELD_TTL_MS) {
+          // Claim it: convert HELD -> BOOKED
+          heldByThis.status = "BOOKED";
+          heldByThis.paymentStatus = "PAID";
+          heldByThis.paymentReference = paymentId || payments[index].id;
+          heldByThis.paymentMethod = payments[index].gateway === "razorpay" ? "Razorpay" : heldByThis.paymentMethod || "SMEpay";
+          heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
+          heldByThis.bookingTime = new Date().toISOString();
+          await writeBookings(bookings);
+          const booking = heldByThis;
+          if (returnUrl) {
+            const url = new URL(returnUrl);
+            url.searchParams.set("payment_status", "success");
+            url.searchParams.set("payment_id", payments[index].id || "");
+            url.searchParams.set("gateway_payment_id", paymentId);
+            url.searchParams.set("order_id", orderId);
+            return res.redirect(303, url.toString());
+          }
+          return res.json({ ok: true, verified: true, payment: payments[index], booking });
+        }
+        // else: held expired, fall through to normal conflict check
+      }
+
+      // If no held reservation for this payment, check whether another active HELD blocks the slot
+      if (slotDate && slotStart) {
+        const conflictHeld = bookings.find((b: any) => {
+          if (b.status !== "HELD" && b.status !== "BOOKED") return false;
+          const bDate = b.slotDate || (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) || (b.raw && b.raw.date) || "";
+          const bStart = b.startTime || (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
+          if (String(bDate) !== slotDate || String(bStart) !== slotStart) return false;
+          if (b.status === "BOOKED" && b.status !== "CANCELLED") return true;
+          if (b.status === "HELD") {
+            const heldAt = b.heldAt ? new Date(b.heldAt).getTime() : 0;
+            if (!heldAt) return true;
+            if (Date.now() - heldAt <= HELD_TTL_MS) return true; // still reserved
+            return false; // expired
+          }
+          return false;
+        });
+
+        if (conflictHeld) {
+          // Mark payment as failed due to slot conflict to avoid creating duplicate booking
+          payments[index].status = "FAILED";
+          payments[index].failureReason = "Slot already booked or reserved";
+          payments[index].updatedAt = new Date().toISOString();
+          await writePayments(payments);
+
+          if (returnUrl) {
+            const url = new URL(returnUrl);
+            url.searchParams.set("payment_status", "failed");
+            url.searchParams.set("payment_id", payments[index].id || "");
+            url.searchParams.set("error", "slot_already_booked");
+            return res.redirect(303, url.toString());
+          }
+
+          return res.status(409).json({ ok: false, error: "Slot already booked or reserved", existing: conflictHeld });
+        }
+      }
+    } catch (err) {
+      console.error("Error while handling held reservation:", err);
+      // fall through to create booking normally
+    }
+
     const booking = await createBookingFromPayment(payments[index], paymentId);
 
     if (returnUrl) {
       const url = new URL(returnUrl);
+      // Use the internal payment record id so the frontend can look it up.
       url.searchParams.set("payment_status", "success");
-      url.searchParams.set("payment_id", paymentId);
+      url.searchParams.set("payment_id", payments[index].id || "");
+      // Also include gateway-specific ids for debugging if needed
+      url.searchParams.set("gateway_payment_id", paymentId);
       url.searchParams.set("order_id", orderId);
       return res.redirect(303, url.toString());
     }
@@ -237,7 +319,7 @@ router.post("/payments/create-checkout", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid amount" });
     }
 
-    const paymentId = makeId();
+    const paymentId = String(body.paymentId || body.payment_record_id || makeId()).trim() || makeId();
 
     const payments = await readPayments();
     const newPayment = {
@@ -374,6 +456,35 @@ router.post("/payments/webhook", async (req, res) => {
     // If paid, create booking server-side from payload (idempotent: check bookings for existing raw.paymentReference)
     if (payments[index].status === "PAID") {
       const payload = payments[index].payload || {};
+      const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
+      const slotStart = String(payload.slotTiming?.startTime || payload.startTime || "").trim();
+
+      const bookings = await readBookings();
+
+      // avoid duplicate booking creation for same paymentReference
+      const existingByRef = bookings.find((b: any) => b.paymentReference && b.paymentReference === (reference || payments[index].id));
+      if (existingByRef) {
+        return res.json({ ok: true });
+      }
+
+      // Check for slot conflict: same date and same start time
+      if (slotDate && slotStart) {
+        const conflict = bookings.find((b: any) => {
+          const bDate = b.slotDate || (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) || (b.raw && b.raw.date) || "";
+          const bStart = b.startTime || (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
+          return String(bDate) === slotDate && String(bStart) === slotStart && b.status !== "CANCELLED";
+        });
+
+        if (conflict) {
+          // Don't create duplicate booking; mark payment as FAILED for operator visibility
+          payments[index].status = "FAILED";
+          payments[index].failureReason = "Slot already booked (webhook)";
+          payments[index].updatedAt = new Date().toISOString();
+          await writePayments(payments);
+          return res.json({ ok: false, error: "Slot already booked", existing: conflict });
+        }
+      }
+
       const booking = {
         id: payload.id || `booking_${Date.now()}`,
         clientName: payload.name || payload.clientName || "",
@@ -392,9 +503,7 @@ router.post("/payments/webhook", async (req, res) => {
         raw: payload,
       };
 
-      const bookings = await readBookings();
-
-      // avoid duplicate booking creation for same paymentReference
+      // avoid duplicate booking by reference again
       const already = bookings.find((b: any) => b.paymentReference && b.paymentReference === booking.paymentReference);
       if (!already) {
         bookings.push(booking);

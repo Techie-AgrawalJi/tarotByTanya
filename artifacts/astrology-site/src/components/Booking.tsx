@@ -5,19 +5,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Sparkles, CheckCircle2, X } from "lucide-react";
-import { 
-  getSessionDurationFromService, 
-  canFitSession, 
-  createBooking,
-  formatSessionSummary,
-  BookedSession,
-  getAvailableSlots,
-  getNextAvailableStartForBlock,
-  timeToMinutes,
-} from "@/lib/slotManager";
-import { getBookings, addBooking, subscribe } from "@/lib/bookingsStore";
-import { Timeline, TimelineCompact } from "@/components/Timeline";
+import { getSessionDurationFromService } from "@/lib/slotManager";
 import { loadBookingDraft, parsePriceLabel, resolvePaymentGateway, saveBookingDraft } from "@/lib/bookingCheckout";
+import {
+  buildAvailabilityGrid,
+  getApiBaseUrl,
+  getBlockSummaryLabel,
+  minutesToDisplayTime,
+  minutesToTime24,
+  parseTimeToMinutes,
+  type BookingRange,
+  type TimeBlockKey,
+} from "@/lib/bookingAvailability";
 
 const COUNTRY_OPTIONS = [
   "India",
@@ -150,6 +149,7 @@ export function Booking() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
   const [selectedService, setSelectedService] = useState("");
+  const [selectedDurationLabel, setSelectedDurationLabel] = useState("");
   const [isDurationOpen, setIsDurationOpen] = useState(false);
   const durationMenuRef = useRef<HTMLDivElement | null>(null);
   const [isMaritalOpen, setIsMaritalOpen] = useState(false);
@@ -160,18 +160,14 @@ export function Booking() {
   const [selectedGender, setSelectedGender] = useState("");
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const serviceMenuRef = useRef<HTMLDivElement | null>(null);
-  
-  // Slot management state (for Tarot sessions)
+
+  const [selectedBlock, setSelectedBlock] = useState<TimeBlockKey | "">("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState("");
-  const [sessionSummary, setSessionSummary] = useState("");
-  // Bookings driven by shared in-memory store so Admin can access them
-  const [bookings, setBookingsState] = useState<BookedSession[]>(() => getBookings());
-
-  useEffect(() => {
-    const unsub = subscribe((bks) => setBookingsState(bks));
-    return unsub;
-  }, []);
+  const [availabilityBookings, setAvailabilityBookings] = useState<BookingRange[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [slotHint, setSlotHint] = useState("");
 
   const styleTag = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
@@ -204,13 +200,22 @@ export function Booking() {
     }
     if (typeof payload.presentCountry === "string") setValue("presentCountry", payload.presentCountry);
     if (typeof payload.country === "string" && typeof payload.presentCountry !== "string") setValue("presentCountry", payload.country);
-    if (typeof payload.gender === "string") setValue("gender", payload.gender);
-    if (typeof payload.maritalStatus === "string") setValue("maritalStatus", payload.maritalStatus);
+    if (typeof payload.gender === "string") {
+      setValue("gender", payload.gender);
+      setSelectedGender(payload.gender);
+    }
+    if (typeof payload.maritalStatus === "string") {
+      setValue("maritalStatus", payload.maritalStatus);
+      setSelectedMarital(payload.maritalStatus);
+    }
     if (typeof payload.occupation === "string") setValue("occupation", payload.occupation);
     if (typeof payload.email === "string") setValue("email", payload.email);
     if (typeof payload.service === "string") {
       setSelectedService(payload.service);
       setValue("service", payload.service, { shouldValidate: true, shouldDirty: true });
+    }
+    if (typeof payload.slotTiming?.timeBlock === "string") {
+      setSelectedBlock(payload.slotTiming.timeBlock.toLowerCase() as TimeBlockKey);
     }
     if (typeof payload.duration === "string") setValue("duration", payload.duration, { shouldValidate: true, shouldDirty: true });
     if (typeof payload.date === "string") {
@@ -220,11 +225,163 @@ export function Booking() {
     if (typeof payload.message === "string") setValue("message", payload.message);
   }, [setValue]);
 
+  // If a booking draft exists and the page is loaded (or navigated back to), scroll the booking section into view.
+  useEffect(() => {
+    const draft = loadBookingDraft();
+    if (!draft) return;
+
+    const scrollToBooking = () => {
+      const el = document.getElementById("booking");
+      if (el) {
+        try {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          // also focus first input for accessibility
+          const firstInput = el.querySelector('input, select, textarea, button') as HTMLElement | null;
+          if (firstInput) firstInput.focus({ preventScroll: true });
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+
+    // If the current hash explicitly requests booking, scroll immediately.
+    if (window.location.hash === "#booking") {
+      // give the layout a moment to stabilise
+      setTimeout(scrollToBooking, 50);
+    } else {
+      // otherwise attempt a gentle scroll so users returning from payment see the form
+      setTimeout(scrollToBooking, 300);
+    }
+
+    const onHash = () => { if (window.location.hash === "#booking") setTimeout(scrollToBooking, 50); };
+    window.addEventListener("hashchange", onHash);
+
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, []);
+
+  // Restore visual state for custom controls when navigating back / restoring the page.
+  useEffect(() => {
+    const restoreFromDraft = () => {
+      const draft = loadBookingDraft();
+      if (!draft) return;
+      const payload = draft.payload || {};
+      if (typeof payload.gender === "string") setSelectedGender(payload.gender);
+      if (typeof payload.maritalStatus === "string") setSelectedMarital(payload.maritalStatus);
+      if (typeof payload.service === "string") {
+        setSelectedService(payload.service);
+        setValue("service", payload.service, { shouldValidate: true, shouldDirty: true });
+      }
+      if (typeof payload.duration === "string") {
+        setValue("duration", payload.duration, { shouldValidate: true, shouldDirty: true });
+        setSelectedDurationLabel(String(payload.duration));
+      }
+    };
+
+    // When the user hits browser Back, popstate fires — restore draft values.
+    window.addEventListener("popstate", restoreFromDraft);
+    // Also restore when page becomes visible or focused
+    const onVisibility = () => { if (!document.hidden) restoreFromDraft(); };
+    window.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", restoreFromDraft);
+
+    return () => {
+      window.removeEventListener("popstate", restoreFromDraft);
+      window.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", restoreFromDraft);
+    };
+  }, [setValue]);
+
+  const currentPackages = watchedService ? servicePackages[watchedService.toLowerCase()] : [];
+  const selectedDuration = currentPackages.find((pkg) => pkg.time === watch("duration"));
+  const selectedDurationMinutes = selectedDuration ? getSessionDurationFromService(selectedDuration.time) : 0;
+  const requiresSlotSelection = watchedService?.toLowerCase() === "tarot";
+  const availabilityGrid = selectedDate && selectedBlock && selectedDurationMinutes
+    ? buildAvailabilityGrid({
+        slotDate: selectedDate,
+        blockKey: selectedBlock,
+        durationMinutes: selectedDurationMinutes,
+        bookings: availabilityBookings,
+      })
+    : [];
+  const selectedGridCell = availabilityGrid.find((cell) => cell.time === selectedSlot);
+  const isSelectedSlotAvailable = Boolean(selectedGridCell && selectedGridCell.status === "available");
+  const selectedBlockSummary = selectedBlock ? getBlockSummaryLabel(selectedBlock) : "";
+  const firstOpenSlot = availabilityGrid.find((cell) => cell.status === "available")?.time || "";
+
+  useEffect(() => {
+    const shouldFetch = Boolean(selectedDate && selectedBlock && selectedDurationMinutes);
+
+    if (!shouldFetch) {
+      setAvailabilityBookings([]);
+      setAvailabilityLoading(false);
+      setAvailabilityError("");
+      return;
+    }
+
+    let cancelled = false;
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+
+    const controller = new AbortController();
+
+    fetch(
+      `${getApiBaseUrl()}/api/bookings/availability?date=${encodeURIComponent(selectedDate)}&timeBlock=${encodeURIComponent(selectedBlock)}`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then(async (response) => {
+        const json = await response.json().catch(() => null);
+        if (!response.ok || !json?.ok) {
+          throw new Error(json?.error || "Unable to load availability.");
+        }
+
+        return json.bookings as BookingRange[];
+      })
+      .then((bookings) => {
+        if (cancelled) return;
+        setAvailabilityBookings(bookings || []);
+        setAvailabilityLoading(false);
+        if (selectedSlot && !bookings.find((booking) => booking.startTime === selectedSlot)) {
+          const nextAvailable = buildAvailabilityGrid({
+            slotDate: selectedDate,
+            blockKey: selectedBlock,
+            durationMinutes: selectedDurationMinutes,
+            bookings: bookings || [],
+          }).find((cell) => cell.status === "available");
+          if (!nextAvailable) {
+            setSlotHint("No available slots remain for this block.");
+          }
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAvailabilityBookings([]);
+        setAvailabilityLoading(false);
+        setAvailabilityError(error instanceof Error ? error.message : "Unable to load availability.");
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectedDate, selectedBlock, selectedDurationMinutes, selectedSlot]);
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
       if (!selectedDuration) {
         alert("Please select a package before continuing to payment.");
+        return;
+      }
+
+      if (requiresSlotSelection && (!selectedDate || !selectedBlock || !selectedSlot)) {
+        alert("Please choose a date, time block, and available slot before continuing.");
+        return;
+      }
+
+      if (requiresSlotSelection && !isSelectedSlotAvailable) {
+        alert(slotHint || "This slot is unavailable. Please select another time.");
         return;
       }
 
@@ -234,27 +391,47 @@ export function Booking() {
         return;
       }
 
+      if (requiresSlotSelection) {
+        const validateResponse = await fetch(`${getApiBaseUrl()}/api/bookings/validate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            date: selectedDate,
+            timeBlock: selectedBlock,
+            startTime: selectedSlot,
+            durationMinutes: selectedDurationMinutes,
+          }),
+        });
+
+        const validateJson = await validateResponse.json().catch(() => null);
+        if (!validateResponse.ok || !validateJson?.available) {
+          const nextSlot = validateJson?.nextAvailableSlot ? minutesToDisplayTime(parseTimeToMinutes(validateJson.nextAvailableSlot) ?? 0) : "";
+          setSlotHint(
+            nextSlot
+              ? `This slot is unavailable. The next available slot is ${nextSlot}.`
+              : "This slot is unavailable. Please select another time.",
+          );
+          return;
+        }
+      }
+
       const paymentGateway = resolvePaymentGateway(data.presentCountry);
 
-      // For Tarot sessions, include slot timing data
-      let bookingData: any = {
+      const bookingData: any = {
         ...data,
         _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`,
         paymentGateway,
+        slotTiming: requiresSlotSelection
+          ? {
+              date: selectedDate,
+              timeBlock: selectedBlock,
+              startTime: selectedSlot,
+              endTime: minutesToTime24((parseTimeToMinutes(selectedSlot) || 0) + selectedDurationMinutes),
+              bufferEndTime: minutesToTime24((parseTimeToMinutes(selectedSlot) || 0) + selectedDurationMinutes + 10),
+              durationMinutes: selectedDurationMinutes,
+            }
+          : undefined,
       };
-
-      if (data.service.toLowerCase() === "tarot" && selectedSlot) {
-        const durationMinutes = getSessionDurationFromService(data.duration);
-        const result = canFitSession(selectedSlot, durationMinutes, bookings, selectedDate);
-        bookingData.slotTiming = {
-          date: selectedDate,
-          startTime: selectedSlot,
-          endTime: result.endTime,
-          bufferEndTime: result.bufferEndTime,
-          durationMinutes,
-          sessionSummary,
-        };
-      }
 
       saveBookingDraft({
         payload: {
@@ -271,6 +448,14 @@ export function Booking() {
         paymentGateway,
         slotTiming: bookingData.slotTiming,
       });
+
+      try {
+        const basePath = String(import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
+        const normalized = `${window.location.origin}${basePath}${"/#booking"}`;
+        window.history.replaceState(null, "", normalized);
+      } catch (err) {
+        // ignore history exceptions
+      }
 
       navigate("/payment");
     } catch (err) {
@@ -290,11 +475,10 @@ export function Booking() {
     // Reset slot and date when service changes
     setSelectedSlot("");
     setSelectedDate("");
-    setSessionSummary("");
+    setSelectedBlock("");
+    setAvailabilityBookings([]);
+    setSlotHint("");
   };
-
-  const currentPackages = watchedService ? servicePackages[watchedService.toLowerCase()] : [];
-  const selectedDuration = currentPackages.find((pkg) => pkg.time === watch("duration"));
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -318,25 +502,6 @@ export function Booking() {
       window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, []);
-
-  // Update session summary when slot or duration changes
-  useEffect(() => {
-    if (
-      selectedSlot &&
-      selectedDate &&
-      watchedService &&
-      watchedService.toLowerCase() === "tarot" &&
-      watch("duration")
-    ) {
-      const durationMinutes = getSessionDurationFromService(watch("duration"));
-      const result = canFitSession(selectedSlot, durationMinutes, bookings, selectedDate);
-      if (result.canFit) {
-        setSessionSummary(
-          `Your session: ${selectedSlot} – ${result.endTime}\nNext slot after you: ${result.bufferEndTime}`
-        );
-      }
-    }
-  }, [selectedSlot, watch("duration"), selectedDate, watchedService]);
 
   return (
     <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
@@ -565,6 +730,10 @@ export function Booking() {
                               // reset duration when service changes
                               setValue("duration", "", { shouldValidate: true, shouldDirty: true });
                               setIsDurationOpen(false);
+                              setSelectedBlock("");
+                              setSelectedSlot("");
+                              setAvailabilityBookings([]);
+                              setSlotHint("");
                               setIsServiceOpen(false);
                             }}
                             className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
@@ -591,8 +760,8 @@ export function Booking() {
                     onClick={() => setIsDurationOpen((open) => !open)}
                     className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className={selectedDuration ? "text-white" : "text-white/50"}>
-                      {selectedDuration ? selectedDuration.time : "Select duration / package..."}
+                    <span className={selectedDuration || selectedDurationLabel ? "text-white" : "text-white/50"}>
+                      {selectedDurationLabel || (selectedDuration ? selectedDuration.time : "Select duration / package...")}
                     </span>
                     <span className={selectedDuration ? "text-primary font-semibold whitespace-nowrap" : "text-primary/60 whitespace-nowrap"}>
                       {selectedDuration ? selectedDuration.price : ""}
@@ -612,6 +781,8 @@ export function Booking() {
                               onClick={() => {
                                 setValue("duration", pkg.time, { shouldValidate: true, shouldDirty: true });
                                 setIsDurationOpen(false);
+                              setSelectedSlot("");
+                              setSlotHint("");
                               }}
                               className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5 ${
                                 isSelected ? "bg-primary/10" : ""
@@ -629,7 +800,7 @@ export function Booking() {
                 {errors.duration && <p className="text-destructive text-sm mt-1">{errors.duration.message}</p>}
               </div>
 
-              {/* Preferred Date + Timeline for Tarot */}
+              {/* Preferred Date + Live Timeline for Tarot */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Date</label>
                 <input 
@@ -640,73 +811,166 @@ export function Booking() {
                   onChange={(e) => {
                     setValue("date", e.target.value, { shouldValidate: true, shouldDirty: true });
                     setSelectedDate(e.target.value);
-                    setSelectedSlot(""); // Reset slot when date changes
+                    setSelectedSlot("");
+                    setSelectedBlock("");
+                    setAvailabilityBookings([]);
+                    setSlotHint("");
                   }}
                   className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
                 {errors.date && <p className="text-destructive text-sm mt-1">{errors.date.message}</p>}
               </div>
 
-              {/* Timeline for Tarot Sessions */}
-                          {watchedService && watchedService.toLowerCase() === "tarot" && watch("duration") && (
-                            <div className="md:col-span-2 space-y-4">
-                              <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Choose Time Block</label>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {(["MORNING", "AFTERNOON", "EVENING"] as const).map((blockKey) => {
-                                  const durationMinutes = getSessionDurationFromService(watch("duration"));
-                                  const blockInfo = getNextAvailableStartForBlock(selectedDate, bookings, durationMinutes, blockKey as any);
+              {watchedService && watchedService.toLowerCase() === "tarot" && watch("duration") && (
+                <div className="md:col-span-2 space-y-4">
+                  <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Choose Time Block</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(["morning", "noon", "evening"] as TimeBlockKey[]).map((blockKey) => {
+                      const isActive = selectedBlock === blockKey;
+                      const blockGrid = isActive && selectedDate && selectedDurationMinutes
+                        ? buildAvailabilityGrid({
+                            slotDate: selectedDate,
+                            blockKey,
+                            durationMinutes: selectedDurationMinutes,
+                            bookings: availabilityBookings,
+                          })
+                        : [];
+                      const openSlot = blockGrid.find((cell) => cell.status === "available")?.time || "";
 
-                                  return (
-                                    <div key={blockKey} className={`p-4 rounded-xl border ${blockInfo.canFit ? "border-primary/30 bg-white/3" : "border-white/10 bg-white/5"}`}>
-                                      <div className="flex items-center justify-between">
-                                        <div>
-                                          <div className="text-sm font-semibold text-white">{blockKey === "MORNING" ? "Morning (9am - 12pm)" : blockKey === "AFTERNOON" ? "Afternoon (2pm - 5pm)" : "Evening (7pm - 11pm)"}</div>
-                                          <div className="text-xs text-white/70 mt-1">{blockInfo.canFit ? `Next available: ${blockInfo.startTime}` : blockInfo.reason}</div>
-                                        </div>
-                                        <div>
-                                          {blockInfo.canFit ? (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                // select this block's next available start
-                                                setSelectedSlot(blockInfo.startTime || "");
-                                                const fakeBooking: BookedSession = {
-                                                  id: `preview_${Date.now()}`,
-                                                  clientName: "",
-                                                  clientPhone: "",
-                                                  startTime: blockInfo.startTime || "",
-                                                  endTime: blockInfo.endTime || "",
-                                                  bufferEndTime: blockInfo.bufferEndTime || "",
-                                                  durationMinutes,
-                                                  sessionType: "tarot",
-                                                  status: "HELD",
-                                                };
-                                                setSessionSummary(formatSessionSummary(fakeBooking));
-                                              }}
-                                              className="px-3 py-2 rounded-full bg-primary text-primary-foreground text-sm"
-                                            >
-                                              Book Next
-                                            </button>
-                                          ) : (
-                                            <button type="button" disabled className="px-3 py-2 rounded-full bg-white/5 text-white/60 text-sm">Not Available</button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                      return (
+                        <button
+                          key={blockKey}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBlock(blockKey);
+                            setSelectedSlot("");
+                            setSlotHint("");
+                          }}
+                          className={`rounded-xl border p-4 text-left transition-all ${isActive ? "border-primary/50 bg-primary/10" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-sm font-semibold text-white">
+                                {blockKey === "morning" ? "Morning (9:00 AM - 12:00 PM)" : blockKey === "noon" ? "Noon (2:00 PM - 5:00 PM)" : "Evening (7:00 PM - 11:00 PM)"}
                               </div>
-
-                              {/* Session Summary */}
-                              {sessionSummary && (
-                                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 mt-4">
-                                  <p className="text-sm text-white whitespace-pre-wrap font-light">
-                                    {sessionSummary}
-                                  </p>
-                                </div>
-                              )}
+                              <div className="text-xs text-white/70 mt-1">
+                                {isActive
+                                  ? selectedDate && selectedDurationMinutes
+                                    ? openSlot
+                                      ? `Next open slot: ${minutesToDisplayTime(parseTimeToMinutes(openSlot) ?? 0)}`
+                                      : availabilityLoading
+                                        ? "Checking availability..."
+                                        : "No open slots in this block"
+                                    : "Select a date and duration first"
+                                  : "Tap to check live availability"}
+                              </div>
                             </div>
-                          )}
+                            <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-white/60">
+                              {getBlockSummaryLabel(blockKey)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-[#080812] px-4 py-3 text-sm text-white/85">
+                    {selectedBlock ? (
+                      <span>
+                        {selectedBlockSummary || "Time block selected"}.
+                        {selectedDate && selectedDurationMinutes > 0
+                          ? " Live slots are loading below."
+                          : " Pick a date and duration to load live slots."}
+                      </span>
+                    ) : (
+                      <span>Select a time block to continue.</span>
+                    )}
+                  </div>
+
+                  {selectedBlock && (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5 space-y-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-white">{selectedBlockSummary}</div>
+                          <div className="text-xs text-white/70">
+                            {!selectedDate || !selectedDurationMinutes
+                              ? "Select a date and duration to load live slots."
+                              : availabilityLoading
+                                ? "Checking live availability..."
+                                : availabilityError
+                                  ? availabilityError
+                                  : slotHint || "Select a green slot to continue."}
+                          </div>
+                        </div>
+                        {selectedDate && selectedDurationMinutes > 0 && firstOpenSlot && (
+                          <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                            Next open slot: {minutesToDisplayTime(parseTimeToMinutes(firstOpenSlot) ?? 0)}
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedDate && selectedDurationMinutes > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-h-80 overflow-y-auto pr-1">
+                          {availabilityGrid.map((cell) => {
+                            const isSelected = selectedSlot === cell.time;
+                            const isAvailable = cell.status === "available";
+                            const unavailableLabel = `Unavailable. Next open slot: ${cell.nextAvailableSlot ? minutesToDisplayTime(parseTimeToMinutes(cell.nextAvailableSlot) ?? 0) : "none"}.`;
+
+                            return (
+                              <button
+                                key={cell.time}
+                                type="button"
+                                title={isAvailable ? "Available" : unavailableLabel}
+                                onClick={() => {
+                                  if (!isAvailable) {
+                                    setSlotHint(unavailableLabel);
+                                    return;
+                                  }
+
+                                  setSelectedSlot(cell.time);
+                                  setSlotHint("This slot is available!");
+                                }}
+                                className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                                  isSelected
+                                    ? "border-primary bg-primary/15 text-white"
+                                    : cell.status === "available"
+                                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50 hover:bg-emerald-400/20"
+                                      : cell.status === "booked"
+                                        ? "border-red-400/30 bg-red-400/10 text-red-100"
+                                        : "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                }`}
+                              >
+                                <div className="text-sm font-semibold">{cell.displayTime}</div>
+                                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] opacity-75">
+                                  {cell.status === "available" ? "🟢 Available" : cell.status === "booked" ? "🔴 Booked" : "🟡 Buffer"}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-sm text-white/70">
+                          Choose a date and duration to load the live slot grid for this block.
+                        </div>
+                      )}
+
+                      <div className="rounded-xl border border-white/10 bg-[#080812] px-4 py-3 text-sm text-white/85">
+                        {selectedGridCell && isSelectedSlotAvailable ? (
+                          <span className="text-emerald-300">This slot is available!</span>
+                        ) : slotHint ? (
+                          <span>{slotHint}</span>
+                        ) : (
+                          <span>Select a green slot to continue.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {availabilityError && (
+                    <p className="text-destructive text-sm">{availabilityError}</p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>
@@ -723,7 +987,7 @@ export function Booking() {
             <div className="text-center">
               <button 
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (requiresSlotSelection && (availabilityLoading || !selectedDuration || !selectedDate || !selectedBlock || !selectedSlot || !isSelectedSlotAvailable))}
                 data-testid="button-submit"
                 className="w-full sm:w-auto inline-flex px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed items-center justify-center gap-2 mx-auto"
               >

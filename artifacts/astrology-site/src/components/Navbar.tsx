@@ -5,6 +5,12 @@ import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const isBrowser = typeof window !== "undefined";
+  const showAdminLink =
+    (import.meta as any).env.DEV === true ||
+    (import.meta as any).env.VITE_SHOW_ADMIN_LINK === "true" ||
+    ((typeof window !== "undefined" && (window as any).__SHOW_ADMIN_LINK === true) ?? false) ||
+    (isBrowser && window.location.hostname.includes("localhost"));
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -58,32 +64,26 @@ export function Navbar() {
           >
             Book Now
           </button>
-          {(() => {
-            const showAdmin = (import.meta as any).env.DEV === true || (import.meta as any).env.VITE_SHOW_ADMIN_LINK === 'true' || (typeof window !== 'undefined' && (window as any).__SHOW_ADMIN_LINK === true) || window.location.hostname.includes('localhost');
-            return showAdmin ? (
-              <Link href="/admin">
-                <button className="px-4 py-2 flex items-center gap-2 border border-white/10 rounded text-white/80 hover:bg-white/5">
-                  <Lock className="w-4 h-4" />
-                  <span>Admin</span>
-                </button>
-              </Link>
-            ) : null;
-          })()}
+          {showAdminLink ? (
+            <Link href="/admin">
+              <button className="px-4 py-2 flex items-center gap-2 border border-white/10 rounded text-white/80 hover:bg-white/5">
+                <Lock className="w-4 h-4" />
+                <span>Admin</span>
+              </button>
+            </Link>
+          ) : null}
         </div>
         {/* Mobile admin button: visible on small screens */}
-        {(() => {
-          const showAdmin = (import.meta as any).env.DEV === true || (import.meta as any).env.VITE_SHOW_ADMIN_LINK === 'true' || (typeof window !== 'undefined' && (window as any).__SHOW_ADMIN_LINK === true) || window.location.hostname.includes('localhost');
-          return showAdmin ? (
-            <div className="md:hidden flex items-center">
-              <Link href="/admin">
-                <button className="ml-2 px-3 py-2 flex items-center gap-2 border border-white/10 rounded text-white/80 hover:bg-white/5">
-                  <Lock className="w-4 h-4" />
-                  <span className="text-sm">Admin</span>
-                </button>
-              </Link>
-            </div>
-          ) : null;
-        })()}
+        {showAdminLink ? (
+          <div className="md:hidden flex items-center">
+            <Link href="/admin">
+              <button className="ml-2 px-3 py-2 flex items-center gap-2 border border-white/10 rounded text-white/80 hover:bg-white/5">
+                <Lock className="w-4 h-4" />
+                <span className="text-sm">Admin</span>
+              </button>
+            </Link>
+          </div>
+        ) : null}
       </div>
     </nav>
   );

@@ -8,9 +8,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss1P3AstTX56L0",
-    "heldAt": "",
-    "clientName": "jay agrawal",
-    "clientPhone": "7534887015"
+    "heldAt": ""
   },
   {
     "id": "booking_1779383187589",
@@ -21,9 +19,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss5fx5h2ElUD2d",
-    "heldAt": "",
-    "clientName": "jay agrawal",
-    "clientPhone": "7534887015"
+    "heldAt": ""
   },
   {
     "id": "booking_1779384180512",
@@ -34,9 +30,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss5xRqV9BeN5ao",
-    "heldAt": "",
-    "clientName": "jay agrawal",
-    "clientPhone": "7534887015"
+    "heldAt": ""
   },
   {
     "id": "booking_1779385909015",
@@ -47,9 +41,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss07Xo7z7BFKoN",
-    "heldAt": "",
-    "clientName": "Test User",
-    "clientPhone": "9876543210"
+    "heldAt": ""
   },
   {
     "id": "booking_1779385909015",
@@ -60,9 +52,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss14GrQUog89h2",
-    "heldAt": "",
-    "clientName": "jay agrawal",
-    "clientPhone": "7534887015"
+    "heldAt": ""
   },
   {
     "id": "booking_1779386225020",
@@ -73,9 +63,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_Ss6XRLiXmwXmI3",
-    "heldAt": "",
-    "clientName": "tanu",
-    "clientPhone": "7534887015"
+    "heldAt": ""
   },
   {
     "id": "booking_1779427726930",
@@ -86,9 +74,7 @@
     "durationMinutes": 20,
     "status": "BOOKED",
     "paymentReference": "pay_SsIKZaDcapYQm6",
-    "heldAt": "2026-05-22T05:28:46.930Z",
-    "clientName": "tanya",
-    "clientPhone": "7534887015"
+    "heldAt": "2026-05-22T05:28:46.930Z"
   },
   {
     "id": "booking_1779427965930",

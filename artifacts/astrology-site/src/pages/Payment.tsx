@@ -66,6 +66,42 @@ function getRazorpayKeyId() {
   return String((import.meta as any).env.VITE_RAZORPAY_KEY_ID || "").trim();
 }
 
+function makePaymentReference() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `pay_${crypto.randomUUID().replace(/-/g, "")}`;
+  }
+
+  return `pay_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
+}
+
+async function reserveSlotBeforePayment(API_BASE: string, paymentReference: string, draft: NonNullable<ReturnType<typeof loadBookingDraft>>) {
+  const slotTiming = draft.slotTiming;
+  if (!slotTiming) {
+    return null;
+  }
+
+  const response = await fetch(`${API_BASE}/api/bookings/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      ...draft.payload,
+      slotTiming,
+      paymentReference,
+      paymentId: paymentReference,
+      paymentMethod: resolvePaymentGateway(String(draft.payload.presentCountry || draft.payload.country || "")) === "razorpay" ? "Razorpay" : "SMEpay",
+      paymentAmount: draft.amount,
+      status: "HELD",
+    }),
+  });
+
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json?.ok) {
+    throw new Error(json?.error || "Unable to reserve this slot.");
+  }
+
+  return json.booking;
+}
+
 function loadRazorpayScript() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Razorpay is only available in the browser."));
@@ -135,10 +171,13 @@ export default function Payment() {
   async function handleRazorpayPayment() {
     const amountPaise = Math.max(100, Math.round(draft?.amount ? draft.amount * 100 : 0));
     const API_BASE = getApiBaseUrl();
+    const paymentReference = makePaymentReference();
 
     setPaymentState("redirecting");
 
     try {
+      await reserveSlotBeforePayment(API_BASE, paymentReference, draft as NonNullable<typeof draft>);
+
       const createOrderResponse = await fetch(`${API_BASE}/api/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -148,6 +187,7 @@ export default function Payment() {
           receipt: `booking_${Date.now()}`,
           description: `${draft?.serviceLabel || "Booking"} - ${draft?.durationLabel || "Package"}`,
           payload: draft?.payload,
+          paymentId: paymentReference,
         }),
       });
 
@@ -184,7 +224,7 @@ export default function Payment() {
           contact: String(draft?.payload.phone || ""),
         },
         notes: {
-          payment_record_id: String(createOrderJson.payment_id || ""),
+          payment_record_id: String(createOrderJson.payment_id || paymentReference || ""),
         },
         theme: {
           color: "#d4b46a",
@@ -196,7 +236,7 @@ export default function Payment() {
             setMessage("Payment window was closed before completion.");
           },
         },
-        handler: async (response) => {
+            handler: async (response) => {
           try {
             setPaymentState("processing");
 
@@ -207,7 +247,7 @@ export default function Payment() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
-                payment_record_id: createOrderJson.payment_id,
+                payment_record_id: paymentReference,
               }),
             });
 
@@ -215,12 +255,15 @@ export default function Payment() {
             if (!verifyResponse.ok || !verifyJson?.verified) {
               throw new Error(verifyJson?.error || "Unable to verify payment.");
             }
-
+            
             completed = true;
             setPaymentState("success");
             setMessage("Payment verified and booking confirmed.");
             clearBookingDraft();
-            goHome();
+            // Show success UI briefly so user sees confirmation, then redirect home.
+            setTimeout(() => {
+              goHome();
+            }, 6000);
           } catch (err) {
             setPaymentState("error");
             setMessage(err instanceof Error ? err.message : "Unable to verify payment.");
@@ -252,7 +295,7 @@ export default function Payment() {
       setPaymentState("processing");
       setHasSubmitted(true);
       try {
-        const API_BASE = (import.meta as any).env.VITE_API_BASE || "http://localhost:5000";
+        const API_BASE = getApiBaseUrl();
         const resp = await fetch(`${API_BASE}/api/payments/${paymentStatus.paymentId}`);
         const json = await resp.json().catch(() => null);
         if (!resp.ok || !json?.payment) throw new Error(json?.error || "Unable to read payment status");
@@ -263,7 +306,8 @@ export default function Payment() {
           setPaymentState("success");
           setMessage("Payment received and booking confirmed.");
           clearBookingDraft();
-          goHome();
+          // show confirmation to user before redirect
+          setTimeout(() => goHome(), 6000);
         } else if (payment.status === "FAILED") {
           setPaymentState("error");
           setMessage("Payment failed. No booking was created.");
@@ -292,7 +336,10 @@ export default function Payment() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-3xl border border-white/10 bg-[#0b0b18]/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md md:p-10">
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => {
+            // Navigate to the booking anchor which will reload the booking page and restore draft from sessionStorage.
+            window.location.assign(getAppUrl("/#booking"));
+          }}
           className="inline-flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -367,6 +414,9 @@ export default function Payment() {
 
                 try {
                   const API_BASE = getApiBaseUrl();
+                  const paymentReference = makePaymentReference();
+                  await reserveSlotBeforePayment(API_BASE, paymentReference, draft as NonNullable<typeof draft>);
+
                   const resp = await fetch(`${API_BASE}/api/payments/create-checkout`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -378,6 +428,7 @@ export default function Payment() {
                       gateway: paymentGateway,
                       presentCountry: draft.payload.presentCountry || draft.payload.country,
                       returnUrl: `${window.location.origin}/payment`,
+                      paymentId: paymentReference,
                     }),
                   });
 
@@ -408,7 +459,10 @@ export default function Payment() {
 
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => {
+                  // Always navigate to the booking anchor so the booking form mounts and restores draft reliably.
+                  window.location.assign(getAppUrl("/#booking"));
+                }}
               className="inline-flex flex-1 items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-4 font-semibold text-white transition-colors hover:bg-white/10"
             >
               Cancel
