@@ -35,10 +35,18 @@ function toAmount(value: unknown) {
   return Number.isFinite(amount) ? Math.round(amount) : 0;
 }
 
-async function createBookingFromPayment(paymentRecord: any, paymentReference: string) {
+async function createBookingFromPayment(paymentRecord: any, paymentRecordId: string, gatewayPaymentId = "") {
   const payload = paymentRecord.payload || {};
   const bookings = await readBookings();
-  const existing = bookings.find((booking: any) => booking.paymentReference === paymentReference);
+  const existing = bookings.find((booking: any) => {
+    const bookingPaymentReference = String(booking.paymentReference || "");
+    const bookingGatewayPaymentId = String(booking.gatewayPaymentId || booking.razorpayPaymentId || booking.raw?.paymentId || booking.raw?.razorpay_payment_id || "");
+
+    return (
+      bookingPaymentReference === paymentRecordId ||
+      (gatewayPaymentId && bookingGatewayPaymentId === gatewayPaymentId)
+    );
+  });
 
   if (existing) {
     return existing;
@@ -57,7 +65,8 @@ async function createBookingFromPayment(paymentRecord: any, paymentReference: st
     paymentMethod: paymentRecord.gateway === "razorpay" ? "Razorpay" : "SMEpay",
     paymentAmount: paymentRecord.amount || 0,
     paymentStatus: "PAID",
-    paymentReference,
+    paymentReference: paymentRecordId,
+    gatewayPaymentId,
     status: "BOOKED",
     bookingTime: new Date().toISOString(),
     raw: payload,
@@ -219,32 +228,37 @@ router.post("/verify-payment", async (req, res) => {
       const bookings = await readBookings();
 
       // Find a HELD reservation that matches this payment (preferred)
-      const heldByThis = bookings.find((b: any) => b.status === "HELD" && b.paymentReference === payments[index].id);
+      const heldByThis = bookings.find((b: any) => {
+        if (b.status !== "HELD") return false;
+
+        const bookingPaymentReference = String(b.paymentReference || "");
+        const bookingGatewayPaymentId = String(b.gatewayPaymentId || b.razorpayPaymentId || b.raw?.paymentId || b.raw?.razorpay_payment_id || "");
+
+        return bookingPaymentReference === payments[index].id || bookingGatewayPaymentId === paymentId;
+      });
 
       if (heldByThis) {
-        // Check expiry
-        const heldAt = heldByThis.heldAt ? new Date(heldByThis.heldAt).getTime() : 0;
-        if (!heldAt || Date.now() - heldAt <= HELD_TTL_MS) {
-          // Claim it: convert HELD -> BOOKED
-          heldByThis.status = "BOOKED";
-          heldByThis.paymentStatus = "PAID";
-          heldByThis.paymentReference = paymentId || payments[index].id;
-          heldByThis.paymentMethod = payments[index].gateway === "razorpay" ? "Razorpay" : heldByThis.paymentMethod || "SMEpay";
-          heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
-          heldByThis.bookingTime = new Date().toISOString();
-          await writeBookings(bookings);
-          const booking = heldByThis;
-          if (returnUrl) {
-            const url = new URL(returnUrl);
-            url.searchParams.set("payment_status", "success");
-            url.searchParams.set("payment_id", payments[index].id || "");
-            url.searchParams.set("gateway_payment_id", paymentId);
-            url.searchParams.set("order_id", orderId);
-            return res.redirect(303, url.toString());
-          }
-          return res.json({ ok: true, verified: true, payment: payments[index], booking });
+        // Claim the reservation for this exact payment even if the hold window elapsed.
+        // The payment itself is the source of truth; expiry is only used to block other users' holds.
+        heldByThis.status = "BOOKED";
+        heldByThis.paymentStatus = "PAID";
+        // Keep the internal payment record id as the canonical reference.
+        heldByThis.paymentReference = payments[index].id;
+        heldByThis.gatewayPaymentId = paymentId;
+        heldByThis.paymentMethod = payments[index].gateway === "razorpay" ? "Razorpay" : heldByThis.paymentMethod || "SMEpay";
+        heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
+        heldByThis.bookingTime = heldByThis.bookingTime || new Date().toISOString();
+        await writeBookings(bookings);
+        const booking = heldByThis;
+        if (returnUrl) {
+          const url = new URL(returnUrl);
+          url.searchParams.set("payment_status", "success");
+          url.searchParams.set("payment_id", payments[index].id || "");
+          url.searchParams.set("gateway_payment_id", paymentId);
+          url.searchParams.set("order_id", orderId);
+          return res.redirect(303, url.toString());
         }
-        // else: held expired, fall through to normal conflict check
+        return res.json({ ok: true, verified: true, payment: payments[index], booking });
       }
 
       // If no held reservation for this payment, check whether another active HELD blocks the slot
@@ -287,7 +301,7 @@ router.post("/verify-payment", async (req, res) => {
       // fall through to create booking normally
     }
 
-    const booking = await createBookingFromPayment(payments[index], paymentId);
+    const booking = await createBookingFromPayment(payments[index], payments[index].id, paymentId);
 
     if (returnUrl) {
       const url = new URL(returnUrl);

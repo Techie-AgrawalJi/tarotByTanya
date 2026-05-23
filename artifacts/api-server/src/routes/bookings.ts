@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
+import { findPaymentById } from "../lib/paymentsStore";
 import {
   BUFFER_MINUTES,
   buildBookedRangesResponse,
@@ -54,7 +55,27 @@ async function hydrateBookingsFromPaidPayments() {
     }
     // Normalize client name and phone from legacy/raw payloads so admin shows details
     if (!b.clientName || String(b.clientName).trim() === "") {
-      const inferredName = (b.raw && (b.raw.name || b.raw.clientName)) || b.name || b.fullName || "";
+      let inferredName = (b.raw && (b.raw.name || b.raw.clientName)) || b.name || b.fullName || "";
+
+      // Try to backfill from related payment record when available
+      if (!inferredName && b.paymentReference) {
+        try {
+          const payment = await findPaymentById(String(b.paymentReference));
+          if (payment) {
+            inferredName =
+              payment.payerName ||
+              payment.customerName ||
+              (payment.customer && (payment.customer.name || payment.customer.fullName)) ||
+              payment.name ||
+              payment.raw?.name ||
+              payment.raw?.customer?.name ||
+              "";
+          }
+        } catch (e) {
+          // ignore payment lookup failures
+        }
+      }
+
       if (inferredName) {
         b.clientName = inferredName;
         changed = true;
@@ -62,10 +83,42 @@ async function hydrateBookingsFromPaidPayments() {
     }
 
     if (!b.clientPhone || String(b.clientPhone).trim() === "") {
-      const inferredPhone = (b.raw && (b.raw.phone || b.raw.clientPhone || b.raw.whatsapp)) || b.clientPhone || b.whatsapp || "";
+      let inferredPhone = (b.raw && (b.raw.phone || b.raw.clientPhone || b.raw.whatsapp)) || b.clientPhone || b.whatsapp || "";
+
+      // Try to backfill from related payment record when available
+      if (!inferredPhone && b.paymentReference) {
+        try {
+          const payment = await findPaymentById(String(b.paymentReference));
+          if (payment) {
+            inferredPhone = payment.phone || payment.contact || payment.raw?.phone || payment.raw?.contact || payment.customer?.phone || "";
+          }
+        } catch (e) {
+          // ignore payment lookup failures
+        }
+      }
+
       if (inferredPhone) {
         b.clientPhone = inferredPhone;
         changed = true;
+      }
+    }
+    // Ensure bookingTime is set so admin can show when it was created
+    if (!b.bookingTime || String(b.bookingTime).trim() === "") {
+      const inferredBookingTime = b.heldAt || b.raw?.bookingTime || b.raw?.createdAt || b.raw?.created_at || "";
+
+      if (inferredBookingTime) {
+        b.bookingTime = inferredBookingTime;
+        changed = true;
+      } else if (b.paymentReference) {
+        try {
+          const payment = await findPaymentById(String(b.paymentReference));
+          if (payment) {
+            b.bookingTime = payment.createdAt || payment.created_at || payment.raw?.createdAt || payment.raw?.created_at || b.bookingTime || "";
+            if (b.bookingTime) changed = true;
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     }
   }
@@ -78,9 +131,20 @@ async function hydrateBookingsFromPaidPayments() {
 }
 
 // GET /api/bookings
+// Return the full booking records for admin UI so clientName, clientPhone, bookingTime, etc. are preserved.
 router.get("/bookings", async (req, res) => {
   try {
-    const bookings = normalizeBookings(await hydrateBookingsFromPaidPayments());
+    // hydrate/backfill legacy fields (clientName/clientPhone/slotDate) then return the full records
+    let bookings = await hydrateBookingsFromPaidPayments();
+    // Ensure each booking has a stable `id` field for the frontend and avoid leaking Mongo `_id` as primary identifier
+    bookings = bookings.map((b: any) => {
+      const id = b.id || b._id || (b._id && b._id.toString && b._id.toString()) || "";
+      const out = { ...b, id };
+      // Optionally remove _id to reduce confusion
+      if (out._id) delete out._id;
+      return out;
+    });
+
     res.json({ ok: true, bookings });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
@@ -168,14 +232,17 @@ router.post("/bookings/create", async (req, res) => {
           ? "noon"
           : "morning";
 
-    const booking = await withBookingLock(async () => {
-      const currentBookings = normalizeBookings(await readBookings());
+      const booking = await withBookingLock(async () => {
+      // Read full booking records (preserve clientName, clientPhone, bookingTime, raw, etc.)
+      const allBookings = await readBookings();
+      // Use a normalized view for availability calculation so slot math still works
+      const bookingsForCheck = normalizeBookings(allBookings);
       const result = calculateSlotAvailability({
         slotDate,
         blockKey: normalizedBlockKey,
         startTime,
         durationMinutes,
-        bookings: currentBookings,
+        bookings: bookingsForCheck,
       });
 
       if (!result.available) {
@@ -213,8 +280,9 @@ router.post("/bookings/create", async (req, res) => {
         raw: payload,
       };
 
-      currentBookings.push(newBooking);
-      await writeBookings(currentBookings);
+      // Persist the full booking object so admin UI retains client details
+      allBookings.push(newBooking);
+      await writeBookings(allBookings);
       return newBooking;
     });
 

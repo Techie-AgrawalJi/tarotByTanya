@@ -102,6 +102,34 @@ async function reserveSlotBeforePayment(API_BASE: string, paymentReference: stri
   return json.booking;
 }
 
+async function confirmSuccessfulPayment(API_BASE: string, paymentReference: string) {
+  try {
+    const paymentResponse = await fetch(`${API_BASE}/api/payments/${encodeURIComponent(paymentReference)}`, {
+      cache: "no-store",
+    });
+    const paymentJson = await paymentResponse.json().catch(() => null);
+    if (paymentResponse.ok && paymentJson?.payment?.status === "PAID") {
+      return true;
+    }
+  } catch {
+    // ignore and fall through to booking lookup
+  }
+
+  try {
+    const bookingsResponse = await fetch(`${API_BASE}/api/bookings`, { cache: "no-store" });
+    const bookingsJson = await bookingsResponse.json().catch(() => null);
+    const bookings = Array.isArray(bookingsJson?.bookings) ? bookingsJson.bookings : [];
+
+    return bookings.some((booking: any) => {
+      const bookingReference = String(booking.paymentReference || booking.raw?.paymentReference || "");
+      const bookingGatewayPaymentId = String(booking.gatewayPaymentId || booking.razorpayPaymentId || booking.raw?.paymentId || booking.raw?.razorpay_payment_id || "");
+      return bookingReference === paymentReference || bookingGatewayPaymentId === paymentReference;
+    });
+  } catch {
+    return false;
+  }
+}
+
 function loadRazorpayScript() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Razorpay is only available in the browser."));
@@ -216,8 +244,6 @@ export default function Payment() {
         order_id: String(createOrderJson.order_id),
         name: "Tarot By Tanya",
         description: `${draft?.serviceLabel || "Booking"} - ${draft?.durationLabel || "Package"}`,
-        callback_url: `${API_BASE}/api/verify-payment?returnUrl=${encodeURIComponent(getAppUrl("/payment"))}`,
-        redirect: true,
         prefill: {
           name: String(draft?.payload.name || ""),
           email: String(draft?.payload.email || ""),
@@ -265,6 +291,22 @@ export default function Payment() {
               goHome();
             }, 6000);
           } catch (err) {
+            const conflictMessage = err instanceof Error ? err.message : String(err || "");
+
+            if (conflictMessage.includes("Slot already booked or reserved")) {
+              const confirmed = await confirmSuccessfulPayment(API_BASE, paymentReference);
+              if (confirmed) {
+                completed = true;
+                setPaymentState("success");
+                setMessage("Payment verified and booking confirmed.");
+                clearBookingDraft();
+                setTimeout(() => {
+                  goHome();
+                }, 6000);
+                return;
+              }
+            }
+
             setPaymentState("error");
             setMessage(err instanceof Error ? err.message : "Unable to verify payment.");
           }

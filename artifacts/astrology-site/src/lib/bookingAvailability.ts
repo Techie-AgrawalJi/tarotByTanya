@@ -15,7 +15,7 @@ export interface BookingRange {
 export interface AvailabilityCell {
   time: string;
   displayTime: string;
-  status: "available" | "booked" | "buffer";
+  status: "available" | "booked" | "buffer" | "unavailable";
   nextAvailableSlot: string;
 }
 
@@ -25,7 +25,7 @@ export const TIME_BLOCKS: Record<TimeBlockKey, { startMinutes: number; endMinute
   evening: { startMinutes: 19 * 60, endMinutes: 23 * 60, label: "Evening" },
 };
 
-const BUFFER_MINUTES = 10;
+const BUFFER_MINUTES = 5;
 const STEP_MINUTES = 10;
 
 export function getApiBaseUrl(): string {
@@ -81,7 +81,7 @@ function isWithinBlock(minutes: number, blockKey: TimeBlockKey): boolean {
   return minutes >= block.startMinutes && minutes < block.endMinutes;
 }
 
-function overlaps(startMinutes: number, endMinutes: number, booking: { startMinutes: number; endMinutes: number; bufferEndMinutes: number }) {
+function overlaps(startMinutes: number, endMinutes: number, booking: { startMinutes: number; bufferEndMinutes: number }) {
   return !(endMinutes <= booking.startMinutes || startMinutes >= booking.bufferEndMinutes);
 }
 
@@ -116,18 +116,16 @@ export function buildAvailabilityGrid(params: {
   const activeBookings = getActiveBookingsForBlock(params.bookings, params.slotDate, params.blockKey);
   const cells: AvailabilityCell[] = [];
 
-  for (let minutes = block.startMinutes; minutes <= block.endMinutes - params.durationMinutes - BUFFER_MINUTES; minutes += STEP_MINUTES) {
+  for (let minutes = block.startMinutes; minutes <= block.endMinutes - params.durationMinutes; minutes += STEP_MINUTES) {
     const sessionEnd = minutes + params.durationMinutes;
     const bufferEnd = sessionEnd + BUFFER_MINUTES;
     const conflictingBooking = activeBookings.find((booking) => overlaps(minutes, bufferEnd, booking));
 
     let status: AvailabilityCell["status"] = "available";
     if (conflictingBooking) {
-      if (minutes < conflictingBooking.endMinutes) {
-        status = "booked";
-      } else {
-        status = "buffer";
-      }
+      const isInSession = minutes >= conflictingBooking.startMinutes && minutes < conflictingBooking.endMinutes;
+      const isInBuffer = minutes >= conflictingBooking.endMinutes && minutes < conflictingBooking.bufferEndMinutes;
+      status = isInSession ? "booked" : isInBuffer ? "buffer" : "unavailable";
     }
 
     cells.push({

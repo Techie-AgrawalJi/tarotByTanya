@@ -103,7 +103,7 @@ type FormData = z.infer<typeof formSchema>;
 
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
-    { time: "Chat Session - 20 Minutes", price: "₹1" },
+    { time: "Chat Session - 20 Minutes", price: "₹499" },
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
     { time: "Video Call - 30 Minutes", price: "₹999" }, 
@@ -214,8 +214,9 @@ export function Booking() {
       setSelectedService(payload.service);
       setValue("service", payload.service, { shouldValidate: true, shouldDirty: true });
     }
-    if (typeof payload.slotTiming?.timeBlock === "string") {
-      setSelectedBlock(payload.slotTiming.timeBlock.toLowerCase() as TimeBlockKey);
+    const slotTiming = payload.slotTiming as { timeBlock?: unknown } | undefined;
+    if (typeof slotTiming?.timeBlock === "string") {
+      setSelectedBlock(slotTiming.timeBlock.toLowerCase() as TimeBlockKey);
     }
     if (typeof payload.duration === "string") setValue("duration", payload.duration, { shouldValidate: true, shouldDirty: true });
     if (typeof payload.date === "string") {
@@ -305,10 +306,13 @@ export function Booking() {
         bookings: availabilityBookings,
       })
     : [];
+  const hasLiveAvailability = Boolean(selectedDate && selectedBlock && selectedDurationMinutes && !availabilityLoading && !availabilityError);
   const selectedGridCell = availabilityGrid.find((cell) => cell.time === selectedSlot);
   const isSelectedSlotAvailable = Boolean(selectedGridCell && selectedGridCell.status === "available");
   const selectedBlockSummary = selectedBlock ? getBlockSummaryLabel(selectedBlock) : "";
-  const firstOpenSlot = availabilityGrid.find((cell) => cell.status === "available")?.time || "";
+  const firstOpenSlot = hasLiveAvailability
+    ? availabilityGrid.find((cell) => cell.status === "available")?.time || ""
+    : "";
 
   useEffect(() => {
     const shouldFetch = Boolean(selectedDate && selectedBlock && selectedDurationMinutes);
@@ -342,30 +346,20 @@ export function Booking() {
         if (cancelled) return;
         setAvailabilityBookings(bookings || []);
         setAvailabilityLoading(false);
-        if (selectedSlot && !bookings.find((booking) => booking.startTime === selectedSlot)) {
-          const nextAvailable = buildAvailabilityGrid({
-            slotDate: selectedDate,
-            blockKey: selectedBlock,
-            durationMinutes: selectedDurationMinutes,
-            bookings: bookings || [],
-          }).find((cell) => cell.status === "available");
-          if (!nextAvailable) {
-            setSlotHint("No available slots remain for this block.");
-          }
-        }
       })
       .catch((error) => {
         if (cancelled) return;
         setAvailabilityBookings([]);
         setAvailabilityLoading(false);
-        setAvailabilityError(error instanceof Error ? error.message : "Unable to load availability.");
+        const message = error instanceof Error ? error.message : "Unable to load availability.";
+        setAvailabilityError(message === "Failed to fetch" ? "Unable to reach booking server. Please try again in a moment." : message);
       });
 
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [selectedDate, selectedBlock, selectedDurationMinutes, selectedSlot]);
+  }, [selectedDate, selectedBlock, selectedDurationMinutes]);
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
@@ -377,6 +371,11 @@ export function Booking() {
 
       if (requiresSlotSelection && (!selectedDate || !selectedBlock || !selectedSlot)) {
         alert("Please choose a date, time block, and available slot before continuing.");
+        return;
+      }
+
+      if (requiresSlotSelection && availabilityError) {
+        alert("Unable to reach booking server. Please wait a moment and try again.");
         return;
       }
 
@@ -427,7 +426,7 @@ export function Booking() {
               timeBlock: selectedBlock,
               startTime: selectedSlot,
               endTime: minutesToTime24((parseTimeToMinutes(selectedSlot) || 0) + selectedDurationMinutes),
-              bufferEndTime: minutesToTime24((parseTimeToMinutes(selectedSlot) || 0) + selectedDurationMinutes + 10),
+              bufferEndTime: minutesToTime24((parseTimeToMinutes(selectedSlot) || 0) + selectedDurationMinutes + 5),
               durationMinutes: selectedDurationMinutes,
             }
           : undefined,
@@ -460,7 +459,12 @@ export function Booking() {
       navigate("/payment");
     } catch (err) {
       console.error(err);
-      alert("There was a problem submitting your request. Please try again.");
+      const message = err instanceof Error ? err.message : "";
+      if (message === "Failed to fetch") {
+        alert("Unable to reach booking server. Please check connection and try again.");
+      } else {
+        alert("There was a problem submitting your request. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -761,7 +765,7 @@ export function Booking() {
                     className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className={selectedDuration || selectedDurationLabel ? "text-white" : "text-white/50"}>
-                      {selectedDurationLabel || (selectedDuration ? selectedDuration.time : "Select duration / package...")}
+                      {selectedDuration ? selectedDuration.time : selectedDurationLabel || "Select duration / package..."}
                     </span>
                     <span className={selectedDuration ? "text-primary font-semibold whitespace-nowrap" : "text-primary/60 whitespace-nowrap"}>
                       {selectedDuration ? selectedDuration.price : ""}
@@ -780,9 +784,10 @@ export function Booking() {
                               type="button"
                               onClick={() => {
                                 setValue("duration", pkg.time, { shouldValidate: true, shouldDirty: true });
+                                setSelectedDurationLabel(pkg.time);
                                 setIsDurationOpen(false);
-                              setSelectedSlot("");
-                              setSlotHint("");
+                                setSelectedSlot("");
+                                setSlotHint("");
                               }}
                               className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5 ${
                                 isSelected ? "bg-primary/10" : ""
@@ -910,10 +915,16 @@ export function Booking() {
                       </div>
 
                       {selectedDate && selectedDurationMinutes > 0 ? (
+                        availabilityError ? (
+                          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-sm text-destructive">
+                            Live slots could not be loaded right now. Please retry in a moment.
+                          </div>
+                        ) : (
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-h-80 overflow-y-auto pr-1">
                           {availabilityGrid.map((cell) => {
                             const isSelected = selectedSlot === cell.time;
                             const isAvailable = cell.status === "available";
+                            const isBuffer = cell.status === "buffer";
                             const unavailableLabel = `Unavailable. Next open slot: ${cell.nextAvailableSlot ? minutesToDisplayTime(parseTimeToMinutes(cell.nextAvailableSlot) ?? 0) : "none"}.`;
 
                             return (
@@ -937,17 +948,26 @@ export function Booking() {
                                       ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50 hover:bg-emerald-400/20"
                                       : cell.status === "booked"
                                         ? "border-red-400/30 bg-red-400/10 text-red-100"
-                                        : "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                        : isBuffer
+                                          ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                          : "border-white/10 bg-white/5 text-white/55"
                                 }`}
                               >
                                 <div className="text-sm font-semibold">{cell.displayTime}</div>
                                 <div className="mt-1 text-[11px] uppercase tracking-[0.18em] opacity-75">
-                                  {cell.status === "available" ? "🟢 Available" : cell.status === "booked" ? "🔴 Booked" : "🟡 Buffer"}
+                                  {cell.status === "available"
+                                    ? "🟢 Available"
+                                    : cell.status === "booked"
+                                      ? "🔴 Booked"
+                                      : isBuffer
+                                        ? "🟡 Buffer"
+                                        : "⚪ Unavailable"}
                                 </div>
                               </button>
                             );
                           })}
                         </div>
+                        )
                       ) : (
                         <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-sm text-white/70">
                           Choose a date and duration to load the live slot grid for this block.

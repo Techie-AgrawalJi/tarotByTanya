@@ -25,7 +25,7 @@ export interface SlotAvailabilityResult {
   conflict?: BookingSlotRange | null;
 }
 
-export const BUFFER_MINUTES = 10;
+export const BUFFER_MINUTES = 5;
 export const HELD_TTL_MINUTES = Number(process.env.HELD_TTL_MINUTES || 10);
 export const STEP_MINUTES = Number(process.env.STEP_MINUTES || 10);
 
@@ -97,10 +97,6 @@ export function isActiveBooking(booking: BookingSlotRange): boolean {
     return false;
   }
 
-  if (status === "HELD" && isExpiredHeldBooking(booking)) {
-    return false;
-  }
-
   return true;
 }
 
@@ -149,7 +145,6 @@ export function calculateSlotAvailability(params: {
   if (startMinutes === null || !params.slotDate || !Number.isFinite(params.durationMinutes) || params.durationMinutes <= 0) {
     return { available: false, nextAvailableSlot: minutesToTime24(block.startMinutes), conflict: null };
   }
-
   const endMinutes = startMinutes + params.durationMinutes;
   const bufferEndMinutes = endMinutes + BUFFER_MINUTES;
 

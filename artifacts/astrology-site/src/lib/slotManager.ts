@@ -19,7 +19,7 @@ export interface BookedSession {
   clientPhone: string;
   startTime: string; // "10:00 AM"
   endTime: string;   // "11:00 AM"
-  bufferEndTime: string; // "11:10 AM" (10 min after endTime)
+  bufferEndTime: string; // "11:05 AM" (5 min after endTime)
   durationMinutes: number;
   sessionType: "tarot" | "spell casting & healer" | "manifestation rituals" | "face reading & name";
   status: "HELD" | "BOOKED" | "CANCELLED" | "COMPLETED";
@@ -50,7 +50,7 @@ const WORKING_HOURS = {
   EVENING: { start: 19, end: 23, label: "EVENING BLOCK" },
 };
 
-const BUFFER_MINUTES = 10;
+const BUFFER_MINUTES = 5;
 const SLOT_GRANULARITY = 15; // 15-minute increments for checking start times (supports all durations: 15, 20, 30, 45, 60 min)
 const MIN_SESSION_MINUTES = 15;
 
