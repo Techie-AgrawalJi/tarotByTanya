@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { Router } from "express";
 import { readPayments, writePayments, findPaymentById } from "../lib/paymentsStore";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
+import { isGuideAvailable } from "../lib/guideAvailabilityStore";
+import { recordConfirmedBooking } from "../lib/bookingMetricsStore";
 
 const router = Router();
 
@@ -36,6 +38,12 @@ function toAmount(value: unknown) {
 }
 
 async function createBookingFromPayment(paymentRecord: any, paymentRecordId: string, gatewayPaymentId = "") {
+  if (!(await isGuideAvailable())) {
+    const error = new Error("Guide is not available today.") as Error & { statusCode?: number };
+    error.statusCode = 423;
+    throw error;
+  }
+
   const payload = paymentRecord.payload || {};
   const bookings = await readBookings();
   const existing = bookings.find((booking: any) => {
@@ -74,6 +82,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
 
   bookings.push(booking);
   await writeBookings(bookings);
+  await recordConfirmedBooking(booking);
 
   return booking;
 }
@@ -187,6 +196,10 @@ router.post("/verify-payment", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing Razorpay payment fields." });
     }
 
+    if (!(await isGuideAvailable())) {
+      return res.status(423).json({ ok: false, error: "Guide is not available today." });
+    }
+
     const { keySecret } = getRazorpayCredentials();
     if (!keySecret) {
       return res.status(500).json({ ok: false, error: "Razorpay credentials are not configured." });
@@ -249,6 +262,7 @@ router.post("/verify-payment", async (req, res) => {
         heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
         heldByThis.bookingTime = heldByThis.bookingTime || new Date().toISOString();
         await writeBookings(bookings);
+        await recordConfirmedBooking(heldByThis);
         const booking = heldByThis;
         if (returnUrl) {
           const url = new URL(returnUrl);
@@ -461,6 +475,14 @@ router.post("/payments/webhook", async (req, res) => {
     const index = payments.findIndex((p: any) => p.id === paymentId);
     if (index === -1) return res.status(404).json({ ok: false, error: "payment not found" });
 
+    if (!(await isGuideAvailable())) {
+      payments[index].status = "FAILED";
+      payments[index].failureReason = "Guide not available today";
+      payments[index].updatedAt = new Date().toISOString();
+      await writePayments(payments);
+      return res.status(423).json({ ok: false, error: "Guide is not available today." });
+    }
+
     payments[index].status = status === "PAID" || status === "SUCCESS" ? "PAID" : status === "FAILED" ? "FAILED" : status;
     payments[index].reference = reference;
     payments[index].updatedAt = new Date().toISOString();
@@ -522,6 +544,7 @@ router.post("/payments/webhook", async (req, res) => {
       if (!already) {
         bookings.push(booking);
         await writeBookings(bookings);
+        await recordConfirmedBooking(booking);
       }
     }
 
@@ -532,3 +555,91 @@ router.post("/payments/webhook", async (req, res) => {
 });
 
 export default router;
+
+// Admin helper: import local JSON data into Mongo (idempotent)
+// POST /api/admin/import-local-data
+router.post("/admin/import-local-data", async (req, res) => {
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const paymentsPath = path.resolve(process.cwd(), "artifacts", "api-server", "data", "payments.json");
+    const bookingsPath = path.resolve(process.cwd(), "artifacts", "api-server", "data", "bookings.json");
+
+    let importedPayments: any[] = [];
+    let importedBookings: any[] = [];
+
+    try {
+      const raw = await fs.readFile(paymentsPath, "utf8");
+      importedPayments = JSON.parse(raw || "[]");
+    } catch (err) {
+      // ignore missing file
+    }
+
+    try {
+      const raw = await fs.readFile(bookingsPath, "utf8");
+      importedBookings = JSON.parse(raw || "[]");
+    } catch (err) {
+      // ignore missing file
+    }
+
+    const existingPayments = await readPayments();
+    const existingBookings = await readBookings();
+
+    const paymentsToInsert = importedPayments.filter((p: any) => !existingPayments.find((e: any) => String(e.id) === String(p.id) || String(e.orderId) === String(p.orderId)));
+    const bookingsToInsert = importedBookings.filter((b: any) => !existingBookings.find((e: any) => String(e.id) === String(b.id) || String(e.paymentReference) === String(b.paymentReference)));
+
+    const mergedPayments = existingPayments.concat(paymentsToInsert);
+    const mergedBookings = existingBookings.concat(bookingsToInsert);
+
+    await writePayments(mergedPayments);
+    await writeBookings(mergedBookings);
+
+    return res.json({ ok: true, imported: { payments: paymentsToInsert.length, bookings: bookingsToInsert.length } });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Admin debug: list payments from DB (first 200)
+router.get("/admin/db-payments", async (req, res) => {
+  try {
+    const payments = await readPayments();
+    return res.json({ ok: true, count: payments.length, payments: payments.slice(-200) });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Admin helper: reconcile PAID payments into bookings if missing
+// POST /api/payments/reconcile
+router.post("/payments/reconcile", async (req, res) => {
+  try {
+    const payments = await readPayments();
+    const paid = payments.filter((p: any) => String((p.status || p.paymentStatus || "")).toUpperCase() === "PAID");
+    const bookings = await readBookings();
+
+    const created: any[] = [];
+
+    for (const p of paid) {
+      const already = bookings.find((b: any) => {
+        const ref = String(b.paymentReference || "");
+        const gatewayId = String(b.gatewayPaymentId || b.razorpayPaymentId || "");
+        return ref === String(p.id) || gatewayId === String(p.razorpayPaymentId || p.gatewayPaymentId || p.gatewayResponse?.id || "");
+      });
+
+      if (already) continue;
+
+      try {
+        const booking = await createBookingFromPayment(p, String(p.id), String(p.razorpayPaymentId || p.gatewayPaymentId || ""));
+        if (booking) created.push(booking);
+      } catch (err) {
+        // continue on error per-payment
+        console.error("Reconcile: failed to create booking from payment", p.id, err);
+      }
+    }
+
+    return res.json({ ok: true, reconciled: created.length, created });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});

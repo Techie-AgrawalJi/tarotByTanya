@@ -169,6 +169,9 @@ export function Booking() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState("");
   const [slotHint, setSlotHint] = useState("");
+  const [guideAvailable, setGuideAvailable] = useState(true);
+  const [guideAvailabilityLoading, setGuideAvailabilityLoading] = useState(true);
+  const [guideAvailabilityMessage, setGuideAvailabilityMessage] = useState("Checking guide availability...");
 
   const styleTag = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
@@ -226,6 +229,35 @@ export function Booking() {
     }
     if (typeof payload.message === "string") setValue("message", payload.message);
   }, [setValue]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${getApiBaseUrl()}/api/guide-status`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const json = await response.json().catch(() => null);
+        if (!response.ok || !json?.ok) {
+          throw new Error(json?.error || "Unable to load guide availability.");
+        }
+
+        setGuideAvailable(Boolean(json.guide?.available));
+        setGuideAvailabilityMessage(String(json.guide?.message || "Guide availability updated.").trim());
+      })
+      .catch(() => {
+        setGuideAvailable(true);
+        setGuideAvailabilityMessage("");
+      })
+      .finally(() => {
+        setGuideAvailabilityLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   // If a booking draft exists and the page is loaded (or navigated back to), scroll the booking section into view.
   useEffect(() => {
@@ -314,6 +346,8 @@ export function Booking() {
   const firstOpenSlot = hasLiveAvailability
     ? availabilityGrid.find((cell) => cell.status === "available")?.time || ""
     : "";
+  const isBookingDisabled = guideAvailabilityLoading ? false : !guideAvailable;
+  const submitButtonDisabled = isSubmitting || isBookingDisabled || (requiresSlotSelection && (availabilityLoading || !selectedDuration || !selectedDate || !selectedBlock || !selectedSlot || !isSelectedSlotAvailable));
 
   useEffect(() => {
     const shouldFetch = Boolean(selectedDate && selectedBlock && selectedDurationMinutes);
@@ -365,6 +399,11 @@ export function Booking() {
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
+      if (isBookingDisabled) {
+        alert(guideAvailabilityMessage || "Guide is not available today. Please try again later.");
+        return;
+      }
+
       if (!selectedDuration) {
         alert("Please select a package before continuing to payment.");
         return;
@@ -532,8 +571,15 @@ export function Booking() {
           className="glass-card rounded-2xl p-8 md:p-12 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
+
+          {isBookingDisabled ? (
+            <div className="mb-6 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              {guideAvailabilityMessage || "Guide is not available today. Booking is temporarily disabled."}
+            </div>
+          ) : null}
+
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 relative z-10">
+            <fieldset disabled={isBookingDisabled} className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Full Name</label>
@@ -1023,9 +1069,9 @@ export function Booking() {
             <div className="text-center">
               <button 
                 type="submit"
-                disabled={isSubmitting || (requiresSlotSelection && (availabilityLoading || !selectedDuration || !selectedDate || !selectedBlock || !selectedSlot || !isSelectedSlotAvailable))}
+                disabled={submitButtonDisabled}
                 data-testid="button-submit"
-                className="w-full sm:w-auto inline-flex px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base hover:bg-white hover:text-[#0a0a1a] transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] disabled:opacity-70 disabled:cursor-not-allowed items-center justify-center gap-2 mx-auto"
+                className={`w-full sm:w-auto inline-flex px-6 sm:px-12 py-4 bg-primary text-primary-foreground rounded-full font-bold uppercase tracking-widest text-sm sm:text-base transition-all duration-300 shadow-[0_0_20px_rgba(201,168,76,0.3)] items-center justify-center gap-2 mx-auto ${submitButtonDisabled ? "opacity-70 cursor-not-allowed" : "hover:bg-white hover:text-[#0a0a1a] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)]"}`}
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
@@ -1039,6 +1085,7 @@ export function Booking() {
                 )}
               </button>
             </div>
+            </fieldset>
           </form>
         </motion.div>
       </div>

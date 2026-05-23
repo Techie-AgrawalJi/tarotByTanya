@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Eye, EyeOff, Mail } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   clearBookings,
   addBooking,
@@ -16,17 +17,18 @@ import Candles from "../components/Candles";
 const ADMIN_EMAIL = (import.meta as any).env.VITE_ADMIN_EMAIL || "admin@example.com";
 const ADMIN_PASSWORD = (import.meta as any).env.VITE_ADMIN_PASSWORD || "password123";
 
-function getApiBaseUrl() {
-  return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
-}
-
 export default function Admin() {
   const [isAuthenticated, setAuthenticated] = useState<boolean>(
     () => !!localStorage.getItem("admin_token"),
   );
+  const [bookings, setBookings] = useState<BookedSession[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [guideAvailable, setGuideAvailable] = useState(true);
+  const [guideStatusLoading, setGuideStatusLoading] = useState(true);
+  const [guideStatusSaving, setGuideStatusSaving] = useState(false);
+  const [guideStatusMessage, setGuideStatusMessage] = useState("");
 
   function loadBookingsFromServer() {
     const API_BASE = getApiBaseUrl();
@@ -56,6 +58,33 @@ export default function Admin() {
 
   useEffect(() => {
     loadBookingsFromServer();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${getApiBaseUrl()}/api/guide-status`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const json = await response.json().catch(() => null);
+        if (!response.ok || !json?.ok) {
+          throw new Error(json?.error || "Unable to load guide availability.");
+        }
+
+        setGuideAvailable(Boolean(json.guide?.available));
+        setGuideStatusMessage(String(json.guide?.message || "").trim());
+      })
+      .catch(() => {
+        setGuideAvailable(true);
+        setGuideStatusMessage("");
+      })
+      .finally(() => {
+        setGuideStatusLoading(false);
+      });
+
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -195,6 +224,42 @@ export default function Admin() {
           <h2 className="text-2xl font-semibold text-white">Admin Dashboard</h2>
 
           <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                const nextAvailable = !guideAvailable;
+                setGuideStatusSaving(true);
+                try {
+                  const response = await fetch(`${getApiBaseUrl()}/api/guide-status`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      available: nextAvailable,
+                      message: nextAvailable ? "Guide is available today." : "Guide is not available today.",
+                    }),
+                  });
+                  const json = await response.json().catch(() => null);
+                  if (json.ok) {
+                    setGuideAvailable(Boolean(json.guide?.available));
+                    setGuideStatusMessage(String(json.guide?.message || "").trim());
+                  } else {
+                    alert(json?.error || "Failed to update guide availability");
+                  }
+                } catch {
+                  alert("Failed to update guide availability");
+                } finally {
+                  setGuideStatusSaving(false);
+                }
+              }}
+              className={`rounded px-3 py-2 text-white transition-colors ${guideAvailable ? "bg-amber-500/20 hover:bg-amber-500/30" : "bg-emerald-500/20 hover:bg-emerald-500/30"}`}
+              disabled={guideStatusLoading || guideStatusSaving}
+            >
+              {guideStatusSaving
+                ? "Saving..."
+                : guideAvailable
+                  ? "Mark Guide Unavailable"
+                  : "Mark Guide Available"}
+            </button>
+
             <button
               onClick={async () => {
                 if (!confirm("Clear all bookings?")) return;

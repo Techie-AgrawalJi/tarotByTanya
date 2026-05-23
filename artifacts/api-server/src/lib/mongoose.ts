@@ -32,10 +32,50 @@ const paymentSchema = new Schema<LooseDocument>(
   },
 );
 
+const bookingCounterSchema = new Schema<LooseDocument>(
+  {},
+  {
+    strict: false,
+    versionKey: false,
+    minimize: false,
+  },
+);
+
+const bookingConfirmationMarkerSchema = new Schema<LooseDocument>(
+  {},
+  {
+    strict: false,
+    versionKey: false,
+    minimize: false,
+  },
+);
+
+const seenClientPhoneSchema = new Schema<LooseDocument>(
+  {},
+  {
+    strict: false,
+    versionKey: false,
+    minimize: false,
+  },
+);
+
+const guideAvailabilitySchema = new Schema<LooseDocument>(
+  {},
+  {
+    strict: false,
+    versionKey: false,
+    minimize: false,
+  },
+);
+
 paymentSchema.index({ id: 1 }, { unique: true, sparse: true });
 paymentSchema.index({ orderId: 1 });
 paymentSchema.index({ razorpayPaymentId: 1 });
 paymentSchema.index({ reference: 1 });
+bookingCounterSchema.index({ id: 1 }, { unique: true, sparse: true });
+bookingConfirmationMarkerSchema.index({ id: 1 }, { unique: true, sparse: true });
+seenClientPhoneSchema.index({ phoneKey: 1 }, { unique: true, sparse: true });
+guideAvailabilitySchema.index({ id: 1 }, { unique: true, sparse: true });
 
 let connectPromise: Promise<typeof mongoose> | null = null;
 
@@ -63,4 +103,24 @@ export async function getBookingModel() {
 export async function getPaymentModel() {
   await connectMongo();
   return getModel("Payment", paymentSchema);
+}
+
+export async function getBookingCounterModel() {
+  await connectMongo();
+  return getModel("BookingCounter", bookingCounterSchema);
+}
+
+export async function getBookingConfirmationMarkerModel() {
+  await connectMongo();
+  return getModel("BookingConfirmationMarker", bookingConfirmationMarkerSchema);
+}
+
+export async function getSeenClientPhoneModel() {
+  await connectMongo();
+  return getModel("SeenClientPhone", seenClientPhoneSchema);
+}
+
+export async function getGuideAvailabilityModel() {
+  await connectMongo();
+  return getModel("GuideAvailability", guideAvailabilitySchema);
 }

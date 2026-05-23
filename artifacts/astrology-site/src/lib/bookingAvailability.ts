@@ -29,7 +29,42 @@ const BUFFER_MINUTES = 5;
 const STEP_MINUTES = 5;
 
 export function getApiBaseUrl(): string {
-  return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
+  const configuredBase = String((import.meta as any).env?.VITE_API_BASE_URL ?? (import.meta as any).env?.VITE_API_BASE ?? "")
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (configuredBase) {
+    if (typeof window === "undefined") {
+      return configuredBase;
+    }
+
+    const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
+    const isLocalHostname = (hostname: string): boolean => localHostnames.has(hostname) || hostname.endsWith(".localhost");
+
+    try {
+      const url = new URL(configuredBase, "http://localhost");
+      if (isLocalHostname(url.hostname) && !isLocalHostname(window.location.hostname)) {
+        return window.location.origin.replace(/\/+$/, "");
+      }
+    } catch {
+      if (/localhost|127\.0\.0\.1|::1/i.test(configuredBase) && !isLocalHostname(window.location.hostname)) {
+        return window.location.origin.replace(/\/+$/, "");
+      }
+    }
+
+    return configuredBase;
+  }
+
+  if (typeof window !== "undefined") {
+    const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
+    if (localHostnames.has(window.location.hostname) || window.location.hostname.endsWith(".localhost")) {
+      return "http://localhost:5000";
+    }
+
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  return "http://localhost:5000";
 }
 
 export function minutesToTime24(minutes: number): string {

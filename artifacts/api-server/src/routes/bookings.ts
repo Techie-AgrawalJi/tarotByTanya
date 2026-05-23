@@ -2,6 +2,8 @@ import { Router } from "express";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
 import { readPayments } from "../lib/paymentsStore";
 import { findPaymentById } from "../lib/paymentsStore";
+import { isGuideAvailable } from "../lib/guideAvailabilityStore";
+import { readBookingMetrics, recordConfirmedBooking } from "../lib/bookingMetricsStore";
 import {
   BUFFER_MINUTES,
   buildBookedRangesResponse,
@@ -39,44 +41,6 @@ function parseAvailabilityQuery(req: any) {
   const slotDate = String(req.query.date || "").trim();
   const blockKey = String(req.query.timeBlock || "").trim().toLowerCase();
   return { slotDate, blockKey } as const;
-}
-
-function normalizePhoneKey(value: unknown): string {
-  const digits = String(value || "").replace(/\D+/g, "");
-  if (!digits) return "";
-  return digits.length > 10 ? digits.slice(-10) : digits;
-}
-
-function isPaidStatus(value: unknown): boolean {
-  const status = String(value || "").trim().toUpperCase();
-  return status === "PAID" || status === "SUCCESS";
-}
-
-function isConfirmedBookingStatus(value: unknown): boolean {
-  const status = String(value || "").trim().toUpperCase();
-  return status === "BOOKED" || status === "COMPLETED";
-}
-
-async function isPaidConfirmedBooking(booking: any): Promise<boolean> {
-  if (!isConfirmedBookingStatus(booking.status || booking.raw?.status)) {
-    return false;
-  }
-
-  if (isPaidStatus(booking.paymentStatus || booking.raw?.paymentStatus)) {
-    return true;
-  }
-
-  const paymentReference = String(booking.paymentReference || booking.raw?.paymentReference || "").trim();
-  if (!paymentReference) {
-    return false;
-  }
-
-  try {
-    const payment = await findPaymentById(paymentReference);
-    return isPaidStatus(payment?.status || payment?.paymentStatus || payment?.raw?.status);
-  } catch {
-    return false;
-  }
 }
 
 async function hydrateBookingsFromPaidPayments() {
@@ -212,20 +176,13 @@ router.get("/bookings", async (req, res) => {
 // GET /api/bookings/stats
 router.get("/bookings/stats", async (req, res) => {
   try {
-    const payments = await readPayments();
-    const successfulPayments = payments.filter(isSuccessfulPayment);
-
-    const uniqueClients = new Set<string>();
-    for (const payment of successfulPayments) {
-      const key = normalizePhoneKey(getPaymentPhone(payment));
-      if (key) uniqueClients.add(key);
-    }
+    const counters = await readBookingMetrics();
 
     return res.json({
       ok: true,
       summary: {
-        uniqueClientsGuided: uniqueClients.size,
-        totalBookings: successfulPayments.length,
+        uniqueClientsGuided: counters.uniqueClientTotal,
+        totalBookings: counters.bookingTotal,
       },
     });
   } catch (err) {
@@ -295,6 +252,10 @@ router.post("/bookings/validate", async (req, res) => {
 // POST /api/bookings/create
 router.post("/bookings/create", async (req, res) => {
   try {
+    if (!(await isGuideAvailable())) {
+      return res.status(423).json({ ok: false, error: "Guide is not available today." });
+    }
+
     const payload = req.body || {};
     const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
     const startTime = String(payload.slotTiming?.startTime || payload.startTime || "").trim();
@@ -378,6 +339,10 @@ router.post("/bookings/create", async (req, res) => {
 // POST /api/bookings
 router.post("/bookings", async (req, res) => {
   try {
+    if (!(await isGuideAvailable())) {
+      return res.status(423).json({ ok: false, error: "Guide is not available today." });
+    }
+
     const payload = req.body || {};
     const newBooking = {
       id: payload.id || `booking_${Date.now()}`,
@@ -401,6 +366,7 @@ router.post("/bookings", async (req, res) => {
     const bookings = await readBookings();
     bookings.push(newBooking);
     await writeBookings(bookings);
+    await recordConfirmedBooking(newBooking);
 
     res.json({ ok: true, booking: newBooking });
   } catch (err) {
@@ -439,12 +405,19 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
       return void res.status(404).json({ ok: false, error: "Booking not found" });
     }
 
+    const previousStatus = String(bookings[index].status || "").trim().toUpperCase();
+
     bookings[index] = {
       ...bookings[index],
       status: nextStatus,
     };
 
     await writeBookings(bookings);
+
+    if (nextStatus === "BOOKED" && previousStatus !== "BOOKED") {
+      await recordConfirmedBooking(bookings[index]);
+    }
+
     return void res.json({ ok: true, booking: bookings[index] });
   } catch (err) {
     return void res.status(500).json({ ok: false, error: String(err) });
@@ -462,3 +435,13 @@ router.delete("/bookings", async (req, res) => {
 });
 
 export default router;
+
+// Admin debug: list bookings from DB
+router.get("/admin/db-bookings", async (req, res) => {
+  try {
+    const bookings = await readBookings();
+    return res.json({ ok: true, count: bookings.length, bookings: bookings.slice(-200) });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
