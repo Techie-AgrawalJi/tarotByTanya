@@ -1082,6 +1082,7 @@ export function Booking() {
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowSuccess(false);
                   scrollToSection("reviews");

@@ -68,6 +68,7 @@ export function Reviews() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedPreviews, setSelectedPreviews] = useState<string[]>([]);
+  const [selectedImage, setSelectedImage] = useState<{ src: string; alt: string } | null>(null);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return;
@@ -304,7 +305,20 @@ export function Reviews() {
                   </div>
                 </div>
                 {r.reviewText ? <p className="text-xs leading-normal text-foreground/70 mb-2 line-clamp-4">{r.reviewText}</p> : null}
-                {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-24 object-cover rounded" /> : null}
+                {r.images && r.images.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename });
+                    }}
+                    className="block w-full text-left"
+                    aria-label={`View image for ${r.name}`}
+                  >
+                    <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-24 object-cover rounded" />
+                  </button>
+                ) : null}
               </div>
             ))
           ) : (
@@ -329,7 +343,16 @@ export function Reviews() {
                       </div>
                     </div>
                     {r.reviewText ? <p className="text-sm leading-normal text-foreground/70 mb-3">{r.reviewText}</p> : null}
-                    {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" /> : null}
+                    {r.images && r.images.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename })}
+                        className="block w-full text-left"
+                        aria-label={`View image for ${r.name}`}
+                      >
+                        <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -348,7 +371,20 @@ export function Reviews() {
                     </div>
                   </div>
                   {r.reviewText ? <p className="text-sm leading-normal text-foreground/70 mb-3">{r.reviewText}</p> : null}
-                  {r.images && r.images.length > 0 ? <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" /> : null}
+                  {r.images && r.images.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename });
+                      }}
+                      className="block w-full text-left"
+                      aria-label={`View image for ${r.name}`}
+                    >
+                      <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" />
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -513,6 +549,38 @@ export function Reviews() {
           {/* Removed inline recent reviews list — reviews are shown in the floating marquee above */}
         </aside>
       </div>
+
+      {selectedImage ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review image viewer"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-8"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelectedImage(null);
+          }}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedImage(null);
+            }}
+            className="absolute right-4 top-4 rounded-full bg-white/10 px-4 py-2 text-sm text-white backdrop-blur hover:bg-white/20"
+          >
+            Close
+          </button>
+          <img
+            src={selectedImage.src}
+            alt={selectedImage.alt}
+            className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
