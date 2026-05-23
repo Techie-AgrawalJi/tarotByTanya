@@ -6,17 +6,18 @@ import {
   readCachedReviewSummary,
   REVIEW_COUNT_UPDATED_EVENT,
 } from "@/lib/review-count";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 
 const CLIENT_PHOTO_URL =
   "https://res.cloudinary.com/dpeycvvoy/image/upload/f_auto/q_auto/tanu_yvbeuo.jpg";
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
 function apiUrl(path: string): string {
-  return `${API_BASE_URL}${path}`;
+  return `${getApiBaseUrl()}${path}`;
 }
 
 export function About() {
   const [reviewCount, setReviewCount] = useState(() => readCachedReviewSummary()?.totalReviews ?? 0);
+  const [bookingStats, setBookingStats] = useState({ uniqueClientsGuided: 0, totalBookings: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +42,30 @@ export function About() {
       }
     }
 
+    async function loadBookingStats(): Promise<void> {
+      try {
+        const response = await fetch(apiUrl("/api/bookings/stats"), { cache: "no-store" });
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          summary?: { uniqueClientsGuided?: number; totalBookings?: number };
+        };
+
+        if (!cancelled) {
+          setBookingStats({
+            uniqueClientsGuided: data.summary?.uniqueClientsGuided ?? 0,
+            totalBookings: data.summary?.totalBookings ?? 0,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setBookingStats({ uniqueClientsGuided: 0, totalBookings: 0 });
+        }
+      }
+    }
+
     const handleReviewCountUpdate = (event: Event) => {
       const customEvent = event as CustomEvent<{ totalReviews?: number }>;
       if (typeof customEvent.detail?.totalReviews === "number") {
@@ -49,6 +74,7 @@ export function About() {
     };
 
     void loadReviewCount();
+    void loadBookingStats();
     window.addEventListener(REVIEW_COUNT_UPDATED_EVENT, handleReviewCountUpdate as EventListener);
 
     return () => {
@@ -122,7 +148,7 @@ export function About() {
             <div className="mb-8">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:gap-4">
                   <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3 lg:mb-0">Meet Your Guide</h2>
-                  <span className="guide-name text-base sm:text-lg md:text-xl">Tanya Agrawal</span>
+                  <span className="guide-name text-base sm:text-lg md:text-xl">Tanyaa Agrawal</span>
                 </div>
                 <div className="h-px w-16 bg-linear-to-r from-primary via-primary to-transparent"></div>
             </div>
@@ -142,10 +168,10 @@ export function About() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 mt-12 pt-10 border-t border-white/10">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mt-12 pt-10 border-t border-white/10">
               <div>
                 <div className="text-3xl font-serif font-bold text-white mb-2">
-                  0
+                  {bookingStats.uniqueClientsGuided.toLocaleString()}
                 </div>
                 <div className="text-sm uppercase tracking-wider text-primary">
                   Clients Guided
@@ -154,6 +180,12 @@ export function About() {
               <div>
                 <div className="text-3xl font-serif font-bold text-white mb-2">{formatReviewCount(reviewCount)}</div>
                 <div className="text-sm uppercase tracking-wider text-primary">Total Reviews</div>
+              </div>
+              <div>
+                <div className="text-3xl font-serif font-bold text-white mb-2">
+                  {bookingStats.totalBookings.toLocaleString()}
+                </div>
+                <div className="text-sm uppercase tracking-wider text-primary">Total Bookings</div>
               </div>
             </div>
           </motion.div>

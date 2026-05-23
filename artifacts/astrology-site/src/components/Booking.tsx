@@ -103,6 +103,7 @@ type FormData = z.infer<typeof formSchema>;
 
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
+    { time: "Chat Session - 15 Minutes", price: "₹349" },
     { time: "Chat Session - 20 Minutes", price: "₹499" },
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
@@ -653,6 +654,7 @@ export function Booking() {
                       <div className="py-2">
                         {[
                           "Single",
+                          "Relationship",
                           "Married",
                           "Divorced",
                           "Widowed",
@@ -914,13 +916,32 @@ export function Booking() {
                         )}
                       </div>
 
+                      <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.16em] text-white/70">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/90" />
+                          Open
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-red-300/90" />
+                          Booked
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-300/90" />
+                          Buffer
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-white/55" />
+                          Blocked
+                        </span>
+                      </div>
+
                       {selectedDate && selectedDurationMinutes > 0 ? (
                         availabilityError ? (
                           <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-sm text-destructive">
                             Live slots could not be loaded right now. Please retry in a moment.
                           </div>
                         ) : (
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-h-80 overflow-y-auto pr-1">
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(108px,1fr))] gap-2 max-h-80 overflow-y-auto pr-1">
                           {availabilityGrid.map((cell) => {
                             const isSelected = selectedSlot === cell.time;
                             const isAvailable = cell.status === "available";
@@ -941,7 +962,7 @@ export function Booking() {
                                   setSelectedSlot(cell.time);
                                   setSlotHint("This slot is available!");
                                 }}
-                                className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                                className={`rounded-xl border px-2 py-2 sm:px-3 sm:py-3 text-left transition-all ${
                                   isSelected
                                     ? "border-primary bg-primary/15 text-white"
                                     : cell.status === "available"
@@ -953,15 +974,19 @@ export function Booking() {
                                           : "border-white/10 bg-white/5 text-white/55"
                                 }`}
                               >
-                                <div className="text-sm font-semibold">{cell.displayTime}</div>
-                                <div className="mt-1 text-[11px] uppercase tracking-[0.18em] opacity-75">
-                                  {cell.status === "available"
-                                    ? "🟢 Available"
-                                    : cell.status === "booked"
-                                      ? "🔴 Booked"
-                                      : isBuffer
-                                        ? "🟡 Buffer"
-                                        : "⚪ Unavailable"}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs sm:text-sm font-semibold">{cell.displayTime}</div>
+                                  <span
+                                    className={`h-2 w-2 sm:h-2.5 sm:w-2.5 shrink-0 rounded-full ${
+                                      cell.status === "available"
+                                        ? "bg-emerald-300/90"
+                                        : cell.status === "booked"
+                                          ? "bg-red-300/90"
+                                          : isBuffer
+                                            ? "bg-amber-300/90"
+                                            : "bg-white/55"
+                                    }`}
+                                  />
                                 </div>
                               </button>
                             );
@@ -974,15 +999,6 @@ export function Booking() {
                         </div>
                       )}
 
-                      <div className="rounded-xl border border-white/10 bg-[#080812] px-4 py-3 text-sm text-white/85">
-                        {selectedGridCell && isSelectedSlotAvailable ? (
-                          <span className="text-emerald-300">This slot is available!</span>
-                        ) : slotHint ? (
-                          <span>{slotHint}</span>
-                        ) : (
-                          <span>Select a green slot to continue.</span>
-                        )}
-                      </div>
                     </div>
                   )}
 

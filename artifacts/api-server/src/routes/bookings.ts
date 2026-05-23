@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { readBookings, writeBookings } from "../lib/bookingsStore";
+import { readPayments } from "../lib/paymentsStore";
 import { findPaymentById } from "../lib/paymentsStore";
 import {
   BUFFER_MINUTES,
@@ -38,6 +39,44 @@ function parseAvailabilityQuery(req: any) {
   const slotDate = String(req.query.date || "").trim();
   const blockKey = String(req.query.timeBlock || "").trim().toLowerCase();
   return { slotDate, blockKey } as const;
+}
+
+function normalizePhoneKey(value: unknown): string {
+  const digits = String(value || "").replace(/\D+/g, "");
+  if (!digits) return "";
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+function isPaidStatus(value: unknown): boolean {
+  const status = String(value || "").trim().toUpperCase();
+  return status === "PAID" || status === "SUCCESS";
+}
+
+function isConfirmedBookingStatus(value: unknown): boolean {
+  const status = String(value || "").trim().toUpperCase();
+  return status === "BOOKED" || status === "COMPLETED";
+}
+
+async function isPaidConfirmedBooking(booking: any): Promise<boolean> {
+  if (!isConfirmedBookingStatus(booking.status || booking.raw?.status)) {
+    return false;
+  }
+
+  if (isPaidStatus(booking.paymentStatus || booking.raw?.paymentStatus)) {
+    return true;
+  }
+
+  const paymentReference = String(booking.paymentReference || booking.raw?.paymentReference || "").trim();
+  if (!paymentReference) {
+    return false;
+  }
+
+  try {
+    const payment = await findPaymentById(paymentReference);
+    return isPaidStatus(payment?.status || payment?.paymentStatus || payment?.raw?.status);
+  } catch {
+    return false;
+  }
 }
 
 async function hydrateBookingsFromPaidPayments() {
@@ -130,6 +169,25 @@ async function hydrateBookingsFromPaidPayments() {
   return bookings;
 }
 
+function isSuccessfulPayment(payment: any): boolean {
+  const status = String(payment?.status || payment?.paymentStatus || "").trim().toUpperCase();
+  return status === "PAID" || status === "SUCCESS";
+}
+
+function getPaymentPhone(payment: any): string {
+  return String(
+    payment?.payload?.phone ||
+      payment?.payload?.clientPhone ||
+      payment?.payload?.whatsapp ||
+      payment?.phone ||
+      payment?.customer?.phone ||
+      payment?.raw?.phone ||
+      payment?.raw?.clientPhone ||
+      payment?.raw?.whatsapp ||
+      "",
+  ).trim();
+}
+
 // GET /api/bookings
 // Return the full booking records for admin UI so clientName, clientPhone, bookingTime, etc. are preserved.
 router.get("/bookings", async (req, res) => {
@@ -148,6 +206,30 @@ router.get("/bookings", async (req, res) => {
     res.json({ ok: true, bookings });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// GET /api/bookings/stats
+router.get("/bookings/stats", async (req, res) => {
+  try {
+    const payments = await readPayments();
+    const successfulPayments = payments.filter(isSuccessfulPayment);
+
+    const uniqueClients = new Set<string>();
+    for (const payment of successfulPayments) {
+      const key = normalizePhoneKey(getPaymentPhone(payment));
+      if (key) uniqueClients.add(key);
+    }
+
+    return res.json({
+      ok: true,
+      summary: {
+        uniqueClientsGuided: uniqueClients.size,
+        totalBookings: successfulPayments.length,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
   }
 });
 

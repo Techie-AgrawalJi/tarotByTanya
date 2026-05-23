@@ -51,7 +51,7 @@ const WORKING_HOURS = {
 };
 
 const BUFFER_MINUTES = 5;
-const SLOT_GRANULARITY = 15; // 15-minute increments for checking start times (supports all durations: 15, 20, 30, 45, 60 min)
+const SLOT_GRANULARITY = 5; // 5-minute increments for checking start times
 const MIN_SESSION_MINUTES = 15;
 
 /**
@@ -169,6 +169,7 @@ export function getAvailableSlots(
  */
 export function getSessionDurationFromService(service: string): number {
   const durationMap: Record<string, number> = {
+    "Chat Session - 15 Minutes": 15,
     "Chat Session - 20 Minutes": 20,
     "Chat Session - 30 Minutes": 30,
     "Chat Session - 60 Minutes": 60,

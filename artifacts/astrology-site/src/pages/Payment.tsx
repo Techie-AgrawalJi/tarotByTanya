@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { CheckCircle2, ArrowLeft, ShieldCheck } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   clearBookingDraft,
   loadBookingDraft,
@@ -12,7 +13,6 @@ declare global {
     Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
   }
 }
-
 type RazorpaySuccessPayload = {
   razorpay_payment_id: string;
   razorpay_order_id: string;
@@ -51,10 +51,6 @@ type RazorpayCheckoutInstance = {
 const RAZORPAY_SCRIPT_URL = "https://checkout.razorpay.com/v1/checkout.js";
 
 let razorpayScriptPromise: Promise<void> | null = null;
-
-function getApiBaseUrl() {
-  return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");
-}
 
 function getAppUrl(pathname = "/") {
   const basePath = String(import.meta.env.BASE_URL || "/").replace(/\/+$/, "");

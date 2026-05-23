@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 
 type ApiReview = { name: string; reviewText: string | null; rating: number; createdAt: string };
 
@@ -17,7 +18,7 @@ export function Testimonials() {
 
     async function load() {
       try {
-        const res = await fetch((import.meta.env.VITE_API_BASE_URL ?? "") + "/api/reviews", { cache: "no-store" });
+        const res = await fetch(`${getApiBaseUrl()}/api/reviews`, { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
@@ -26,7 +27,6 @@ export function Testimonials() {
         // ignore
       }
     }
-
     void load();
 
     return () => {

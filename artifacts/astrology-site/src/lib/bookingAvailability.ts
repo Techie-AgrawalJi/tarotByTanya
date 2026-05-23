@@ -26,7 +26,7 @@ export const TIME_BLOCKS: Record<TimeBlockKey, { startMinutes: number; endMinute
 };
 
 const BUFFER_MINUTES = 5;
-const STEP_MINUTES = 10;
+const STEP_MINUTES = 5;
 
 export function getApiBaseUrl(): string {
   return ((import.meta as any).env.VITE_API_BASE_URL || (import.meta as any).env.VITE_API_BASE || "http://localhost:5000").replace(/\/+$/, "");

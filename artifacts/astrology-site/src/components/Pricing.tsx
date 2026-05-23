@@ -46,6 +46,7 @@ export function Pricing() {
 
   const durationsByTab: Record<string, { time: string; price: string; included: string }[]> = {
     tarot: [
+      { time: "Chat - 15 Minutes", price: "₹349", included: "Quick clarity session with focused guidance in a 15-minute chat" },
       { time: "Chat - 20 Minutes", price: "₹499", included: "Unlimited questions within a 20-minute chat session" },
       { time: "Chat - 30 Minutes", price: "₹699", included: "Unlimited questions with detailed reading and guidance" },
       { time: "Chat - 60 Minutes", price: "₹1,299", included: "Extended chat session with detailed reading and unlimited questions" },

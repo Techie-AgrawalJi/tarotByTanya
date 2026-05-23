@@ -27,7 +27,6 @@ export default function Admin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [bookings, setBookings] = useState<BookedSession[]>([]);
 
   function loadBookingsFromServer() {
     const API_BASE = getApiBaseUrl();

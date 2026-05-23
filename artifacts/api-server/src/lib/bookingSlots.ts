@@ -27,7 +27,7 @@ export interface SlotAvailabilityResult {
 
 export const BUFFER_MINUTES = 5;
 export const HELD_TTL_MINUTES = Number(process.env.HELD_TTL_MINUTES || 10);
-export const STEP_MINUTES = Number(process.env.STEP_MINUTES || 10);
+export const STEP_MINUTES = Number(process.env.STEP_MINUTES || 5);
 
 export const TIME_BLOCKS: Record<TimeBlockKey, BookingTimeBlock> = {
   morning: { key: "morning", startMinutes: 9 * 60, endMinutes: 12 * 60, label: "Morning" },
