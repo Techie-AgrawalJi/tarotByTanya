@@ -20,8 +20,7 @@ type BookingLike = Record<string, any>;
 
 function normalizePhoneKey(value: unknown): string {
   const digits = String(value || "").replace(/\D+/g, "");
-  if (!digits) return "";
-  return digits.length > 10 ? digits.slice(-10) : digits;
+  return digits.trim();
 }
 
 function getBookingKey(booking: BookingLike): string {
@@ -57,7 +56,7 @@ function isConfirmedBooking(booking: BookingLike): boolean {
 function normalizeMetrics(record: any): BookingMetricsRecord {
   const now = new Date();
   return {
-    id: String(record?.id || BOOKING_COUNTER_ID),
+    id: String(record?._id || record?.id || BOOKING_COUNTER_ID),
     bookingTotal: Number(record?.bookingTotal || 0),
     uniqueClientTotal: Number(record?.uniqueClientTotal || 0),
     createdAt: record?.createdAt ? new Date(record.createdAt) : now,
@@ -68,14 +67,14 @@ function normalizeMetrics(record: any): BookingMetricsRecord {
 async function getMetricsDocument() {
   const Counter = await getBookingCounterModel();
   const now = new Date();
-  const existing = await Counter.findOne({ id: BOOKING_COUNTER_ID }).lean().exec();
+  const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
 
   if (existing) {
     return normalizeMetrics(existing);
   }
 
   const created = await Counter.create({
-    id: BOOKING_COUNTER_ID,
+    _id: BOOKING_COUNTER_ID,
     bookingTotal: 0,
     uniqueClientTotal: 0,
     createdAt: now,
@@ -89,12 +88,35 @@ export async function readBookingMetrics(): Promise<BookingMetricsRecord> {
   return getMetricsDocument();
 }
 
+export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
+  const Counter = await getBookingCounterModel();
+  const Marker = await getBookingConfirmationMarkerModel();
+  const SeenPhone = await getSeenClientPhoneModel();
+  const now = new Date();
+
+  await Promise.all([
+    Counter.deleteMany({}),
+    Marker.deleteMany({}),
+    SeenPhone.deleteMany({}),
+  ]);
+
+  const reset = await Counter.create({
+    _id: BOOKING_COUNTER_ID,
+    bookingTotal: 0,
+    uniqueClientTotal: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return normalizeMetrics(reset);
+}
+
 export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
   const Counter = await getBookingCounterModel();
   const Marker = await getBookingConfirmationMarkerModel();
   const SeenPhone = await getSeenClientPhoneModel();
 
-  const existing = await Counter.findOne({ id: BOOKING_COUNTER_ID }).lean().exec();
+  const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
   if (existing) {
     return normalizeMetrics(existing);
   }
@@ -134,16 +156,30 @@ export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
     }
   }
 
-  if (confirmationMarkers.length > 0) {
-    await Marker.insertMany(confirmationMarkers, { ordered: false });
+  const existingMarkers = await Marker.find({ bookingKey: { $in: confirmationMarkers.map((item) => item.bookingKey) } }).lean().exec();
+  const existingPhones = await SeenPhone.find({ phoneKey: { $in: phoneMarkers.map((item) => item.phoneKey) } }).lean().exec();
+  const existingMarkerKeys = new Set(existingMarkers.map((item: any) => String(item.bookingKey || item._id || "").trim()).filter(Boolean));
+  const existingPhoneKeys = new Set(existingPhones.map((item: any) => String(item.phoneKey || item._id || "").trim()).filter(Boolean));
+
+  const missingConfirmationMarkers = confirmationMarkers.filter((item) => !existingMarkerKeys.has(String(item.bookingKey || "").trim()));
+  const missingPhoneMarkers = phoneMarkers.filter((item) => !existingPhoneKeys.has(String(item.phoneKey || "").trim()));
+
+  if (missingConfirmationMarkers.length > 0) {
+    await Marker.insertMany(
+      missingConfirmationMarkers.map((item) => ({ ...item, _id: String(item.bookingKey) })),
+      { ordered: false },
+    );
   }
 
-  if (phoneMarkers.length > 0) {
-    await SeenPhone.insertMany(phoneMarkers, { ordered: false });
+  if (missingPhoneMarkers.length > 0) {
+    await SeenPhone.insertMany(
+      missingPhoneMarkers.map((item) => ({ ...item, _id: String(item.phoneKey) })),
+      { ordered: false },
+    );
   }
 
   const seeded = await Counter.create({
-    id: BOOKING_COUNTER_ID,
+    _id: BOOKING_COUNTER_ID,
     bookingTotal: confirmationMarkers.length,
     uniqueClientTotal: phoneMarkers.length,
     createdAt: now,
@@ -174,7 +210,9 @@ export async function recordConfirmedBooking(booking: BookingLike): Promise<Book
     let nextCounter: BookingMetricsRecord | null = null;
 
     await session.withTransaction(async () => {
-      const existingMarker = await Marker.findOne({ id: bookingKey }).session(session).lean().exec();
+      const existingMarker = await Marker.findOne({
+        $or: [{ _id: bookingKey }, { bookingKey }],
+      }).session(session).lean().exec();
       if (existingMarker) {
         nextCounter = await getMetricsDocument();
         return;
@@ -182,10 +220,10 @@ export async function recordConfirmedBooking(booking: BookingLike): Promise<Book
 
       const now = new Date();
       await Marker.updateOne(
-        { id: bookingKey },
+        { _id: bookingKey },
         {
           $setOnInsert: {
-            id: bookingKey,
+            _id: bookingKey,
             bookingKey,
             bookingId: String(booking.id || bookingKey),
             paymentReference: String(booking.paymentReference || booking.paymentId || ""),
@@ -196,14 +234,14 @@ export async function recordConfirmedBooking(booking: BookingLike): Promise<Book
         { upsert: true, session },
       );
 
-      const phoneWasNew = Boolean(phoneKey) && !(await SeenPhone.findOne({ phoneKey }).session(session).lean().exec());
+      const phoneWasNew = Boolean(phoneKey) && !(await SeenPhone.findOne({ $or: [{ _id: phoneKey }, { phoneKey }] }).session(session).lean().exec());
 
       if (phoneWasNew && phoneKey) {
         await SeenPhone.updateOne(
-          { phoneKey },
+          { _id: phoneKey },
           {
             $setOnInsert: {
-              id: phoneKey,
+              _id: phoneKey,
               phoneKey,
               phone: bookingPhone,
               firstSeenAt: now,
@@ -214,14 +252,8 @@ export async function recordConfirmedBooking(booking: BookingLike): Promise<Book
       }
 
       nextCounter = await Counter.findOneAndUpdate(
-        { id: BOOKING_COUNTER_ID },
+        { _id: BOOKING_COUNTER_ID },
         {
-          $setOnInsert: {
-            id: BOOKING_COUNTER_ID,
-            bookingTotal: 0,
-            uniqueClientTotal: 0,
-            createdAt: now,
-          },
           $inc: {
             bookingTotal: 1,
             ...(phoneWasNew && phoneKey ? { uniqueClientTotal: 1 } : {}),

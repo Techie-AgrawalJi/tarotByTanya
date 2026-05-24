@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Sparkles, CheckCircle2, X } from "lucide-react";
 import { getSessionDurationFromService } from "@/lib/slotManager";
-import { loadBookingDraft, parsePriceLabel, resolvePaymentGateway, saveBookingDraft } from "@/lib/bookingCheckout";
+import { loadBookingDraft, parsePriceLabel, saveBookingDraft } from "@/lib/bookingCheckout";
 import {
   buildAvailabilityGrid,
   getApiBaseUrl,
@@ -18,81 +18,14 @@ import {
   type TimeBlockKey,
 } from "@/lib/bookingAvailability";
 
-const COUNTRY_OPTIONS = [
-  "India",
-  "United States",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-  "New Zealand",
-  "United Arab Emirates",
-  "Singapore",
-  "Malaysia",
-  "Saudi Arabia",
-  "Qatar",
-  "Oman",
-  "Kuwait",
-  "Bahrain",
-  "Pakistan",
-  "Bangladesh",
-  "Sri Lanka",
-  "Nepal",
-  "Bhutan",
-  "Afghanistan",
-  "United Arab Emirates",
-  "South Africa",
-  "Nigeria",
-  "Kenya",
-  "Egypt",
-  "Germany",
-  "France",
-  "Italy",
-  "Spain",
-  "Netherlands",
-  "Belgium",
-  "Switzerland",
-  "Austria",
-  "Sweden",
-  "Norway",
-  "Denmark",
-  "Finland",
-  "Ireland",
-  "Portugal",
-  "Greece",
-  "Turkey",
-  "Russia",
-  "Ukraine",
-  "Poland",
-  "Czech Republic",
-  "Romania",
-  "Hungary",
-  "Mexico",
-  "Brazil",
-  "Argentina",
-  "Chile",
-  "Colombia",
-  "Peru",
-  "Japan",
-  "South Korea",
-  "China",
-  "Hong Kong",
-  "Taiwan",
-  "Thailand",
-  "Vietnam",
-  "Philippines",
-  "Indonesia",
-].filter((value, index, list) => list.indexOf(value) === index);
-
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(10, "Valid WhatsApp number required"),
   dob: z.string().min(1, "Please enter your date of birth"),
   birthLocation: z.string().min(3, "Please enter your city, state, and country of birth"),
-  presentCountry: z.string().min(1, "Please select your present country"),
   gender: z.string().min(1, "Please select your gender"),
   maritalStatus: z.string().min(1, "Please select your marital status"),
   occupation: z.string().min(2, "Please enter your occupation"),
-  email: z.string().email("Invalid email address"),
   service: z.string().min(1, "Please select a service"),
   duration: z.string().min(1, "Please select a duration"),
   date: z.string().min(1, "Please select a date"),
@@ -202,8 +135,6 @@ export function Booking() {
         setValue("birthLocation", payload.placeOfBirth);
       }
     }
-    if (typeof payload.presentCountry === "string") setValue("presentCountry", payload.presentCountry);
-    if (typeof payload.country === "string" && typeof payload.presentCountry !== "string") setValue("presentCountry", payload.country);
     if (typeof payload.gender === "string") {
       setValue("gender", payload.gender);
       setSelectedGender(payload.gender);
@@ -213,7 +144,6 @@ export function Booking() {
       setSelectedMarital(payload.maritalStatus);
     }
     if (typeof payload.occupation === "string") setValue("occupation", payload.occupation);
-    if (typeof payload.email === "string") setValue("email", payload.email);
     if (typeof payload.service === "string") {
       setSelectedService(payload.service);
       setValue("service", payload.service, { shouldValidate: true, shouldDirty: true });
@@ -454,12 +384,9 @@ export function Booking() {
         }
       }
 
-      const paymentGateway = resolvePaymentGateway(data.presentCountry);
-
       const bookingData: any = {
         ...data,
         _subject: `New Booking Request — ${data.service} ${data.duration} — ${data.name}`,
-        paymentGateway,
         slotTiming: requiresSlotSelection
           ? {
               date: selectedDate,
@@ -477,14 +404,12 @@ export function Booking() {
           ...bookingData,
           paymentAmount: amount,
           paymentStatus: "PENDING",
-          presentCountry: data.presentCountry,
         },
         amount,
         amountLabel: selectedDuration.price,
         serviceLabel: data.service,
         durationLabel: data.duration,
         createdAt: new Date().toISOString(),
-        paymentGateway,
         slotTiming: bookingData.slotTiming,
       });
 
@@ -628,21 +553,6 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Present Country</label>
-                <select
-                  {...register("presentCountry")}
-                  data-testid="select-present-country"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                >
-                  <option value="">Select present country</option>
-                  {COUNTRY_OPTIONS.map((country) => (
-                    <option key={`present-${country}`} value={country}>{country}</option>
-                  ))}
-                </select>
-                {errors.presentCountry && <p className="text-destructive text-sm mt-1">{errors.presentCountry.message}</p>}
-              </div>
-
-              <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Gender</label>
                 <div className="relative" ref={genderMenuRef}>
                   <input type="hidden" {...register("gender")} />
@@ -735,18 +645,6 @@ export function Booking() {
                   placeholder="Your profession"
                 />
                 {errors.occupation && <p className="text-destructive text-sm mt-1">{errors.occupation.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Email</label>
-                <input 
-                  {...register("email")}
-                  type="email"
-                  data-testid="input-email"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  placeholder="jane@example.com"
-                />
-                {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -1118,7 +1016,7 @@ export function Booking() {
               
               <h3 className="text-3xl font-serif font-bold text-white mb-4">Journey Initiated</h3>
               <p className="text-foreground/90 font-light leading-relaxed mb-8">
-                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A confirmation will be sent to your email shortly.
+                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A confirmation will be sent to your WhatsApp number shortly.
               </p>
               
               <button 

@@ -33,7 +33,9 @@ const paymentSchema = new Schema<LooseDocument>(
 );
 
 const bookingCounterSchema = new Schema<LooseDocument>(
-  {},
+  {
+    _id: { type: String },
+  },
   {
     strict: false,
     versionKey: false,
@@ -42,7 +44,9 @@ const bookingCounterSchema = new Schema<LooseDocument>(
 );
 
 const bookingConfirmationMarkerSchema = new Schema<LooseDocument>(
-  {},
+  {
+    _id: { type: String },
+  },
   {
     strict: false,
     versionKey: false,
@@ -51,7 +55,9 @@ const bookingConfirmationMarkerSchema = new Schema<LooseDocument>(
 );
 
 const seenClientPhoneSchema = new Schema<LooseDocument>(
-  {},
+  {
+    _id: { type: String },
+  },
   {
     strict: false,
     versionKey: false,

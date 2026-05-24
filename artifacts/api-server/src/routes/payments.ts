@@ -4,25 +4,12 @@ import { readPayments, writePayments, findPaymentById } from "../lib/paymentsSto
 import { readBookings, writeBookings } from "../lib/bookingsStore";
 import { isGuideAvailable } from "../lib/guideAvailabilityStore";
 import { recordConfirmedBooking } from "../lib/bookingMetricsStore";
+import { sendBookingWhatsAppConfirmation } from "../lib/whatsapp";
 
 const router = Router();
 
 function makeId(prefix = "pay_") {
   return `${prefix}${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
-}
-
-function resolveGateway(input: unknown): "smepay" | "razorpay" {
-  const normalized = String(input ?? "").trim().toLowerCase();
-
-  if (!normalized) {
-    return "smepay";
-  }
-
-  if (normalized === "india" || normalized === "in" || normalized.includes("india") || normalized.includes("bharat")) {
-    return "smepay";
-  }
-
-  return "razorpay";
 }
 
 function getRazorpayCredentials() {
@@ -70,7 +57,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
     bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
     durationMinutes: payload.slotTiming?.durationMinutes || payload.durationMinutes || 0,
     sessionType: (payload.service || payload.sessionType || "").toString().toLowerCase(),
-    paymentMethod: paymentRecord.gateway === "razorpay" ? "Razorpay" : "SMEpay",
+    paymentMethod: "Razorpay",
     paymentAmount: paymentRecord.amount || 0,
     paymentStatus: "PAID",
     paymentReference: paymentRecordId,
@@ -83,6 +70,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
   bookings.push(booking);
   await writeBookings(bookings);
   await recordConfirmedBooking(booking);
+  await sendBookingWhatsAppConfirmation(booking);
 
   return booking;
 }
@@ -258,11 +246,12 @@ router.post("/verify-payment", async (req, res) => {
         // Keep the internal payment record id as the canonical reference.
         heldByThis.paymentReference = payments[index].id;
         heldByThis.gatewayPaymentId = paymentId;
-        heldByThis.paymentMethod = payments[index].gateway === "razorpay" ? "Razorpay" : heldByThis.paymentMethod || "SMEpay";
+        heldByThis.paymentMethod = "Razorpay";
         heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
         heldByThis.bookingTime = heldByThis.bookingTime || new Date().toISOString();
         await writeBookings(bookings);
         await recordConfirmedBooking(heldByThis);
+        await sendBookingWhatsAppConfirmation(heldByThis);
         const booking = heldByThis;
         if (returnUrl) {
           const url = new URL(returnUrl);
@@ -334,120 +323,6 @@ router.post("/verify-payment", async (req, res) => {
   }
 });
 
-// Create a checkout session and return a checkout URL
-router.post("/payments/create-checkout", async (req, res) => {
-  try {
-    const body = req.body || {};
-    const amount = Number(body.amount || (body.payload && body.payload.paymentAmount) || 0);
-    const payload = body.payload || {};
-    const description = String(body.description || `${payload.service || "booking"} ${payload.duration || ""}`);
-    const gateway = resolveGateway(body.gateway || payload.presentCountry || payload.country || body.presentCountry || body.country);
-
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ ok: false, error: "Invalid amount" });
-    }
-
-    const paymentId = String(body.paymentId || body.payment_record_id || makeId()).trim() || makeId();
-
-    const payments = await readPayments();
-    const newPayment = {
-      id: paymentId,
-      amount,
-      currency: body.currency || "INR",
-      status: "PENDING",
-      payload,
-      description,
-      gateway,
-      createdAt: new Date().toISOString(),
-    };
-
-    payments.push(newPayment);
-    await writePayments(payments);
-
-    const gatewayName = gateway === "razorpay" ? "Razorpay" : "SMEpay";
-    const createUrl =
-      gateway === "razorpay"
-        ? process.env.RAZORPAY_CREATE_URL || process.env.RAZORPAY_API_URL || ""
-        : process.env.SMEPAY_CREATE_URL || process.env.SMEPAY_API_URL || "";
-    const apiKey =
-      gateway === "razorpay"
-        ? process.env.RAZORPAY_API_KEY || process.env.RAZORPAY_SECRET || ""
-        : process.env.SMEPAY_API_KEY || process.env.SMEPAY_SECRET || "";
-
-    let checkoutUrl = "";
-
-    if (createUrl && apiKey) {
-      try {
-        const createBody = {
-          amount,
-          currency: newPayment.currency,
-          description,
-          payment_id: paymentId,
-          return_url: body.returnUrl || `${req.protocol}://${req.get("host")}/payment`,
-        };
-
-        const resp = await fetch(createUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(createBody),
-        });
-
-        const apiResp: any = await resp.json().catch(() => null);
-
-        // store gateway response on the payment record
-        const paymentsAfter = await readPayments();
-        const idx = paymentsAfter.findIndex((p: any) => p.id === paymentId);
-        if (idx !== -1) {
-          paymentsAfter[idx].gateway = gateway;
-          paymentsAfter[idx].gatewayResponse = apiResp || null;
-          await writePayments(paymentsAfter);
-        }
-
-        if (resp.ok && apiResp) {
-          // common fields returned by gateway
-          checkoutUrl = apiResp.checkout_url || apiResp.url || apiResp.redirect_url || "";
-        }
-      } catch (err) {
-        // ignore and fallback to composed URL below
-        checkoutUrl = "";
-      }
-    }
-
-    // Fallback: build checkout URL from the configured gateway base URL
-    if (!checkoutUrl) {
-      const base =
-        gateway === "razorpay"
-          ? process.env.RAZORPAY_CHECKOUT_URL || process.env.RAZORPAY_BASE_URL || ""
-          : process.env.SMEPAY_CHECKOUT_URL || process.env.SMEPAY_BASE_URL || "";
-      if (base) {
-        try {
-          const url = new URL(base);
-          url.searchParams.set("amount", String(amount));
-          url.searchParams.set("currency", newPayment.currency);
-          url.searchParams.set("description", description);
-          url.searchParams.set("payment_id", paymentId);
-          url.searchParams.set("return_url", body.returnUrl || `${req.protocol}://${req.get("host")}/payment`);
-          checkoutUrl = url.toString();
-        } catch (err) {
-          // fallback
-          checkoutUrl = `${base}?amount=${amount}&payment_id=${paymentId}`;
-        }
-      }
-    }
-
-    if (!checkoutUrl) {
-      return res.status(500).json({ ok: false, error: `${gatewayName} checkout is not configured.` });
-    }
-
-    return res.json({ ok: true, paymentId, checkoutUrl, gateway });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: String(err) });
-  }
-});
-
 // GET payment status
 router.get("/payments/:id", async (req, res) => {
   try {
@@ -460,7 +335,7 @@ router.get("/payments/:id", async (req, res) => {
   }
 });
 
-// Webhook endpoint: SMEpay will POST here to notify of payment events.
+// Webhook endpoint for payment events.
 // For now we accept a minimal payload: { paymentId, status, reference }
 router.post("/payments/webhook", async (req, res) => {
   try {
@@ -530,7 +405,7 @@ router.post("/payments/webhook", async (req, res) => {
         bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
         durationMinutes: payload.slotTiming?.durationMinutes || payload.durationMinutes || 0,
         sessionType: (payload.service || payload.sessionType || "").toString().toLowerCase(),
-        paymentMethod: payments[index].gateway === "razorpay" ? "Razorpay" : "SMEpay",
+        paymentMethod: "Razorpay",
         paymentAmount: payments[index].amount || 0,
         paymentStatus: "PAID",
         paymentReference: reference || payments[index].id,
@@ -545,6 +420,7 @@ router.post("/payments/webhook", async (req, res) => {
         bookings.push(booking);
         await writeBookings(bookings);
         await recordConfirmedBooking(booking);
+        await sendBookingWhatsAppConfirmation(booking);
       }
     }
 

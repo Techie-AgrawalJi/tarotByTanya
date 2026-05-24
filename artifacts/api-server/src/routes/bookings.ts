@@ -3,7 +3,9 @@ import { readBookings, writeBookings } from "../lib/bookingsStore";
 import { readPayments } from "../lib/paymentsStore";
 import { findPaymentById } from "../lib/paymentsStore";
 import { isGuideAvailable } from "../lib/guideAvailabilityStore";
-import { readBookingMetrics, recordConfirmedBooking } from "../lib/bookingMetricsStore";
+import { readBookingMetrics, recordConfirmedBooking, resetBookingMetrics } from "../lib/bookingMetricsStore";
+import { sendBookingWhatsAppConfirmation } from "../lib/whatsapp";
+import { getBookingCounterModel, getBookingConfirmationMarkerModel, getSeenClientPhoneModel } from "../lib/mongoose";
 import {
   BUFFER_MINUTES,
   buildBookedRangesResponse,
@@ -368,6 +370,11 @@ router.post("/bookings", async (req, res) => {
     await writeBookings(bookings);
     await recordConfirmedBooking(newBooking);
 
+    const confirmedStatus = String(newBooking.status || "").trim().toUpperCase();
+    if (confirmedStatus === "BOOKED" || confirmedStatus === "PAID" || confirmedStatus === "COMPLETED") {
+      await sendBookingWhatsAppConfirmation(newBooking);
+    }
+
     res.json({ ok: true, booking: newBooking });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
@@ -416,6 +423,7 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
 
     if (nextStatus === "BOOKED" && previousStatus !== "BOOKED") {
       await recordConfirmedBooking(bookings[index]);
+      await sendBookingWhatsAppConfirmation(bookings[index]);
     }
 
     return void res.json({ ok: true, booking: bookings[index] });
@@ -441,6 +449,34 @@ router.get("/admin/db-bookings", async (req, res) => {
   try {
     const bookings = await readBookings();
     return res.json({ ok: true, count: bookings.length, bookings: bookings.slice(-200) });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+router.get("/admin/db-booking-metrics", async (req, res) => {
+  try {
+    const Counter = await getBookingCounterModel();
+    const Marker = await getBookingConfirmationMarkerModel();
+    const SeenPhone = await getSeenClientPhoneModel();
+
+    const [counter, counterDocs, markers, phones] = await Promise.all([
+      Counter.findOne({ _id: "booking-metrics" }).lean().exec(),
+      Counter.find({}).lean().exec(),
+      Marker.find({}).lean().exec(),
+      SeenPhone.find({}).lean().exec(),
+    ]);
+
+    return res.json({ ok: true, counter, counterDocs, markerCount: markers.length, phoneCount: phones.length, markers, phones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+router.post("/admin/reset-booking-metrics", async (req, res) => {
+  try {
+    const metrics = await resetBookingMetrics();
+    return res.json({ ok: true, metrics });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }

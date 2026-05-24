@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { CheckCircle2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import {
-  clearBookingDraft,
-  loadBookingDraft,
-  resolvePaymentGateway,
-} from "@/lib/bookingCheckout";
+import { clearBookingDraft, loadBookingDraft } from "@/lib/bookingCheckout";
 
 declare global {
   interface Window {
@@ -68,34 +64,6 @@ function makePaymentReference() {
   }
 
   return `pay_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
-}
-
-async function reserveSlotBeforePayment(API_BASE: string, paymentReference: string, draft: NonNullable<ReturnType<typeof loadBookingDraft>>) {
-  const slotTiming = draft.slotTiming;
-  if (!slotTiming) {
-    return null;
-  }
-
-  const response = await fetch(`${API_BASE}/api/bookings/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      ...draft.payload,
-      slotTiming,
-      paymentReference,
-      paymentId: paymentReference,
-      paymentMethod: resolvePaymentGateway(String(draft.payload.presentCountry || draft.payload.country || "")) === "razorpay" ? "Razorpay" : "SMEpay",
-      paymentAmount: draft.amount,
-      status: "HELD",
-    }),
-  });
-
-  const json = await response.json().catch(() => null);
-  if (!response.ok || !json?.ok) {
-    throw new Error(json?.error || "Unable to reserve this slot.");
-  }
-
-  return json.booking;
 }
 
 async function confirmSuccessfulPayment(API_BASE: string, paymentReference: string) {
@@ -161,22 +129,11 @@ function loadRazorpayScript() {
   return razorpayScriptPromise;
 }
 
-function readPaymentStatus() {
-  const params = new URLSearchParams(window.location.search);
-  const status = (params.get("status") || params.get("payment_status") || params.get("paymentStatus") || "").toLowerCase();
-  const paymentId = params.get("payment_id") || params.get("paymentId") || params.get("txn_id") || params.get("reference");
-  return {
-    isSuccess: status === "success" || status === "paid" || !!paymentId,
-    paymentId: paymentId || "",
-  };
-}
-
 export default function Payment() {
   const [, navigate] = useLocation();
   const [draft, setDraft] = useState(() => loadBookingDraft());
   const [paymentState, setPaymentState] = useState<"idle" | "redirecting" | "processing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
-  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   function goHome() {
     window.location.replace(getAppUrl("/"));
@@ -200,8 +157,6 @@ export default function Payment() {
     setPaymentState("redirecting");
 
     try {
-      await reserveSlotBeforePayment(API_BASE, paymentReference, draft as NonNullable<typeof draft>);
-
       const createOrderResponse = await fetch(`${API_BASE}/api/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -322,52 +277,11 @@ export default function Payment() {
     }
   }
 
-  useEffect(() => {
-    if (!draft || hasSubmitted) return;
-
-    const paymentStatus = readPaymentStatus();
-    if (!paymentStatus.isSuccess) return;
-
-    // If SMEpay returned a payment_id/status in the query, we'll poll the server for a verified status
-    const pollServerForStatus = async () => {
-      setPaymentState("processing");
-      setHasSubmitted(true);
-      try {
-        const API_BASE = getApiBaseUrl();
-        const resp = await fetch(`${API_BASE}/api/payments/${paymentStatus.paymentId}`);
-        const json = await resp.json().catch(() => null);
-        if (!resp.ok || !json?.payment) throw new Error(json?.error || "Unable to read payment status");
-
-        const payment = json.payment;
-        if (payment.status === "PAID") {
-          // booking should have been created server-side by webhook; check bookings via API or assume created
-          setPaymentState("success");
-          setMessage("Payment received and booking confirmed.");
-          clearBookingDraft();
-          // show confirmation to user before redirect
-          setTimeout(() => goHome(), 6000);
-        } else if (payment.status === "FAILED") {
-          setPaymentState("error");
-          setMessage("Payment failed. No booking was created.");
-        } else {
-          // still pending — retry a few times
-          setTimeout(pollServerForStatus, 2000);
-        }
-      } catch (err) {
-        setPaymentState("error");
-        setMessage(err instanceof Error ? err.message : "Unable to verify payment status.");
-      }
-    };
-
-    pollServerForStatus();
-  }, [draft, hasSubmitted]);
-
   if (!draft) {
     return null;
   }
 
-  const paymentGateway = draft.paymentGateway ?? resolvePaymentGateway(String(draft.payload.presentCountry || draft.payload.country || ""));
-  const gatewayLabel = paymentGateway === "razorpay" ? "Razorpay" : "SMEpay";
+  const gatewayLabel = "Razorpay";
 
   return (
     <main className="min-h-screen bg-[#090712] px-4 py-10 text-white">
@@ -409,10 +323,6 @@ export default function Payment() {
             <p className="text-xs uppercase tracking-[0.2em] text-white/45">Name</p>
             <p className="mt-1 text-lg text-white">{String(draft.payload.name || "")}</p>
           </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-white/45">Country</p>
-            <p className="mt-1 text-lg text-white">{String(draft.payload.presentCountry || draft.payload.country || "")}</p>
-          </div>
         </div>
 
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5 text-sm text-amber-100">
@@ -447,51 +357,12 @@ export default function Payment() {
           <div className="flex flex-col gap-3 md:flex-row">
             <button
               type="button"
-              onClick={paymentGateway === "razorpay" ? handleRazorpayPayment : async () => {
-                setPaymentState("redirecting");
-
-                try {
-                  const API_BASE = getApiBaseUrl();
-                  const paymentReference = makePaymentReference();
-                  await reserveSlotBeforePayment(API_BASE, paymentReference, draft as NonNullable<typeof draft>);
-
-                  const resp = await fetch(`${API_BASE}/api/payments/create-checkout`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", Accept: "application/json" },
-                    body: JSON.stringify({
-                      amount: draft.amount,
-                      currency: "INR",
-                      description: `${draft.serviceLabel} - ${draft.durationLabel}`,
-                      payload: draft.payload,
-                      gateway: paymentGateway,
-                      presentCountry: draft.payload.presentCountry || draft.payload.country,
-                      returnUrl: `${window.location.origin}/payment`,
-                      paymentId: paymentReference,
-                    }),
-                  });
-
-                  const json = await resp.json().catch(() => null);
-                  if (!resp.ok || !json?.checkoutUrl) {
-                    throw new Error(json?.error || "Unable to create checkout");
-                  }
-
-                  try {
-                    sessionStorage.setItem("pending_payment_id", json.paymentId);
-                  } catch {}
-
-                  window.location.href = json.checkoutUrl;
-                } catch (err) {
-                  setPaymentState("error");
-                  setMessage(err instanceof Error ? err.message : "Unable to open checkout.");
-                }
-              }}
+              onClick={handleRazorpayPayment}
               disabled={paymentState === "redirecting" || paymentState === "processing"}
               className="inline-flex flex-1 items-center justify-center rounded-full bg-primary px-6 py-4 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {paymentState === "redirecting"
-                ? paymentGateway === "razorpay"
-                  ? `Opening ${gatewayLabel}...`
-                  : `Redirecting to ${gatewayLabel}...`
+                ? `Opening ${gatewayLabel}...`
                 : `Pay with ${gatewayLabel}`}
             </button>
 
