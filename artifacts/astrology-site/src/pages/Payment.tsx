@@ -135,19 +135,15 @@ export default function Payment() {
   const [paymentState, setPaymentState] = useState<"idle" | "redirecting" | "processing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
-  function goHome() {
-    window.location.replace(getAppUrl("/"));
-  }
-
   useEffect(() => {
     const currentDraft = loadBookingDraft();
     if (!currentDraft) {
-      navigate("/");
+      setDraft(null);
       return;
     }
 
     setDraft(currentDraft);
-  }, [navigate]);
+  }, []);
 
   async function handleRazorpayPayment() {
     const amountPaise = Math.max(100, Math.round(draft?.amount ? draft.amount * 100 : 0));
@@ -237,10 +233,6 @@ export default function Payment() {
             setPaymentState("success");
             setMessage("Payment verified and booking confirmed.");
             clearBookingDraft();
-            // Show success UI briefly so user sees confirmation, then redirect home.
-            setTimeout(() => {
-              goHome();
-            }, 6000);
           } catch (err) {
             const conflictMessage = err instanceof Error ? err.message : String(err || "");
 
@@ -251,9 +243,6 @@ export default function Payment() {
                 setPaymentState("success");
                 setMessage("Payment verified and booking confirmed.");
                 clearBookingDraft();
-                setTimeout(() => {
-                  goHome();
-                }, 6000);
                 return;
               }
             }
@@ -278,7 +267,27 @@ export default function Payment() {
   }
 
   if (!draft) {
-    return null;
+    return (
+      <main className="min-h-screen bg-[#090712] px-4 py-10 text-white">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 rounded-3xl border border-white/10 bg-[#0b0b18]/80 p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md md:p-10">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.28em] text-primary/70">Razorpay Checkout</p>
+            <h1 className="text-3xl font-semibold md:text-4xl">No active booking found</h1>
+            <p className="text-white/65">
+              Your booking draft is missing or has already been cleared.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="mx-auto inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground"
+          >
+            Return home
+          </button>
+        </div>
+      </main>
+    );
   }
 
   const gatewayLabel = "Razorpay";
