@@ -91,7 +91,7 @@ function getDatabaseOptions() {
 
 export async function connectMongo() {
   if (!connectPromise) {
-    connectPromise = mongoose.connect(MONGODB_URI, getDatabaseOptions()).then(() => mongoose);
+    connectPromise = mongoose.connect(MONGODB_URI!, getDatabaseOptions()).then(() => mongoose);
   }
 
   return connectPromise;

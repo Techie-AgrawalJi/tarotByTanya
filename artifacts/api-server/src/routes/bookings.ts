@@ -339,10 +339,10 @@ router.post("/bookings/create", async (req, res) => {
 });
 
 // POST /api/bookings
-router.post("/bookings", async (req, res) => {
+router.post("/bookings", async (req, res): Promise<void> => {
   try {
     if (!(await isGuideAvailable())) {
-      return res.status(423).json({ ok: false, error: "Guide is not available today." });
+      return void res.status(423).json({ ok: false, error: "Guide is not available today." });
     }
 
     const payload = req.body || {};
@@ -375,9 +375,9 @@ router.post("/bookings", async (req, res) => {
       await sendBookingWhatsAppConfirmation(newBooking);
     }
 
-    res.json({ ok: true, booking: newBooking });
+    return void res.json({ ok: true, booking: newBooking });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    return void res.status(500).json({ ok: false, error: String(err) });
   }
 });
 

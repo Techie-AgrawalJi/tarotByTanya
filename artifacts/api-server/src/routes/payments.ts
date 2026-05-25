@@ -5,6 +5,7 @@ import { readBookings, writeBookings } from "../lib/bookingsStore";
 import { isGuideAvailable } from "../lib/guideAvailabilityStore";
 import { recordConfirmedBooking } from "../lib/bookingMetricsStore";
 import { sendBookingWhatsAppConfirmation } from "../lib/whatsapp";
+import { calculateSlotAvailability, isValidTimeBlock } from "../lib/bookingSlots";
 
 const router = Router();
 
@@ -24,6 +25,13 @@ function toAmount(value: unknown) {
   return Number.isFinite(amount) ? Math.round(amount) : 0;
 }
 
+function getLocalDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function createBookingFromPayment(paymentRecord: any, paymentRecordId: string, gatewayPaymentId = "") {
   if (!(await isGuideAvailable())) {
     const error = new Error("Guide is not available today.") as Error & { statusCode?: number };
@@ -33,6 +41,33 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
 
   const payload = paymentRecord.payload || {};
   const bookings = await readBookings();
+  const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
+  const startTime = String(payload.slotTiming?.startTime || payload.startTime || "").trim();
+  const durationMinutes = Number(payload.slotTiming?.durationMinutes || payload.durationMinutes || 0);
+  const timeBlock = String(payload.slotTiming?.timeBlock || payload.timeBlock || "").trim().toLowerCase();
+
+  if (slotDate && slotDate < getLocalDateString()) {
+    const error = new Error("Selected date must be today or a future date.") as Error & { statusCode?: number };
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (slotDate && isValidTimeBlock(timeBlock) && startTime && Number.isFinite(durationMinutes) && durationMinutes > 0) {
+    const availability = calculateSlotAvailability({
+      slotDate,
+      blockKey: timeBlock,
+      startTime,
+      durationMinutes,
+      bookings,
+    });
+
+    if (!availability.available) {
+      const error = new Error("Selected slot is no longer available.") as Error & { statusCode?: number };
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
   const existing = bookings.find((booking: any) => {
     const bookingPaymentReference = String(booking.paymentReference || "");
     const bookingGatewayPaymentId = String(booking.gatewayPaymentId || booking.razorpayPaymentId || booking.raw?.paymentId || booking.raw?.razorpay_payment_id || "");
@@ -51,7 +86,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
     id: payload.id || `booking_${Date.now()}`,
     clientName: payload.name || payload.clientName || "",
     clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
-      slotDate: payload.slotTiming?.date || payload.date || "", // Ensure slotDate is included
+    slotDate: slotDate,
     startTime: payload.slotTiming?.startTime || payload.startTime || "",
     endTime: payload.slotTiming?.endTime || payload.endTime || "",
     bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",

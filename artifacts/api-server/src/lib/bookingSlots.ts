@@ -39,6 +39,17 @@ export function isValidTimeBlock(value: unknown): value is TimeBlockKey {
   return value === "morning" || value === "noon" || value === "evening";
 }
 
+function getLocalDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getRoundedUpMinutes(minutes: number, stepMinutes: number): number {
+  return Math.ceil(minutes / stepMinutes) * stepMinutes;
+}
+
 export function minutesToTime24(minutes: number): string {
   const normalized = ((Math.floor(minutes) % (24 * 60)) + 24 * 60) % (24 * 60);
   const hours = Math.floor(normalized / 60);
@@ -141,10 +152,35 @@ export function calculateSlotAvailability(params: {
 }): SlotAvailabilityResult {
   const block = getBlockRange(params.blockKey);
   const startMinutes = parseTimeToMinutes(params.startTime);
+  const isToday = params.slotDate === getLocalDateString();
+  if (params.slotDate < getLocalDateString()) {
+    return { available: false, nextAvailableSlot: "", conflict: null };
+  }
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const minimumStartMinutes = isToday ? Math.max(block.startMinutes, getRoundedUpMinutes(currentMinutes, STEP_MINUTES)) : block.startMinutes;
 
   if (startMinutes === null || !params.slotDate || !Number.isFinite(params.durationMinutes) || params.durationMinutes <= 0) {
     return { available: false, nextAvailableSlot: minutesToTime24(block.startMinutes), conflict: null };
   }
+
+  if (isToday && currentMinutes >= block.endMinutes) {
+    return {
+      available: false,
+      nextAvailableSlot: "",
+      conflict: null,
+    };
+  }
+
+  if (startMinutes < minimumStartMinutes) {
+    return {
+      available: false,
+      nextAvailableSlot: minutesToTime24(minimumStartMinutes),
+      conflict: null,
+    };
+  }
+
   const endMinutes = startMinutes + params.durationMinutes;
   const bufferEndMinutes = endMinutes + BUFFER_MINUTES;
 

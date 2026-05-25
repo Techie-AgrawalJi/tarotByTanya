@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { Star, Upload } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Star, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { format } from "date-fns";
 import {
@@ -56,9 +56,10 @@ export function Reviews() {
   const [reviews, setReviews] = useState<ReviewRecord[]>(() =>
     Array.isArray(cachedReviews?.reviews) ? (cachedReviews.reviews as ReviewRecord[]) : [],
   );
-  const [summary, setSummary] = useState(
-    () => cachedReviews?.summary ?? { totalReviews: 0, averageRating: 0 },
-  );
+  const [summary, setSummary] = useState(() => ({
+    totalReviews: cachedReviews?.summary?.totalReviews ?? 0,
+    averageRating: cachedReviews?.summary?.averageRating ?? 0,
+  }));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,7 +69,28 @@ export function Reviews() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedPreviews, setSelectedPreviews] = useState<string[]>([]);
-  const [selectedImage, setSelectedImage] = useState<{ src: string; alt: string } | null>(null);
+  const [viewer, setViewer] = useState<{ images: ReviewImage[]; currentIndex: number } | null>(null);
+  const [viewerDirection, setViewerDirection] = useState<1 | -1>(1);
+  const [expandedReviewIds, setExpandedReviewIds] = useState<Record<string, boolean>>({});
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  function getReviewTextValue(formEl: HTMLFormElement): string {
+    const field = formEl.elements.namedItem("reviewText");
+
+    if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
+      return field.value.trim();
+    }
+
+    return "";
+  }
+
+  function isReviewTextLongEnough(value: string): boolean {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+
+    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    return wordCount >= 10;
+  }
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return;
@@ -92,6 +114,67 @@ export function Reviews() {
     });
   };
 
+  async function compressImage(file: File, maxWidth = 1400, quality = 0.78): Promise<File> {
+    try {
+      if (!file.type.startsWith('image/')) return file;
+
+      // use createImageBitmap when available for better performance
+      let bitmap: ImageBitmap | HTMLCanvasElement;
+      if (typeof (window as any).createImageBitmap === 'function') {
+        bitmap = await (window as any).createImageBitmap(file);
+      } else {
+        // fallback: load image and draw to canvas
+        bitmap = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              const ctx = canvas.getContext('2d');
+              ctx?.drawImage(img, 0, 0);
+              resolve(canvas);
+            } catch (err) { reject(err); }
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        });
+      }
+
+      // determine target dimensions
+      const origWidth = (bitmap as any).width || (bitmap as any).naturalWidth;
+      const origHeight = (bitmap as any).height || (bitmap as any).naturalHeight;
+      let targetWidth = origWidth;
+      let targetHeight = origHeight;
+      if (origWidth > maxWidth) {
+        targetWidth = maxWidth;
+        targetHeight = Math.round((maxWidth * origHeight) / origWidth);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      // draw the bitmap onto canvas
+      if (bitmap instanceof ImageBitmap) {
+        ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      } else {
+        // fallback when bitmap is actually an HTMLCanvasElement from fallback above
+        ctx.drawImage(bitmap as unknown as CanvasImageSource, 0, 0, targetWidth, targetHeight);
+      }
+
+      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (!blob) return file;
+      const outFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+      return outFile;
+    } catch (err) {
+      // on any failure, return original file so submission still works
+      console.warn('Image compression failed, sending original file', err);
+      return file;
+    }
+  }
+
   const removeImage = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     setSelectedPreviews(prev => prev.filter((_, i) => i !== index));
@@ -102,12 +185,131 @@ export function Reviews() {
     setSelectedPreviews([]);
   };
 
+  function openImageViewer(images: ReviewImage[], currentIndex: number): void {
+    setViewerDirection(1);
+    setViewer({ images, currentIndex });
+  }
+
+  function closeImageViewer(): void {
+    setViewer(null);
+  }
+
+  function stepImageViewer(direction: 1 | -1): void {
+    setViewerDirection(direction);
+    setViewer((current) => {
+      if (!current) return current;
+
+      const total = current.images.length;
+      return {
+        ...current,
+        currentIndex: (current.currentIndex + direction + total) % total,
+      };
+    });
+  }
+
+  function toggleReviewExpansion(reviewId: string): void {
+    setExpandedReviewIds((current) => ({
+      ...current,
+      [reviewId]: !current[reviewId],
+    }));
+  }
+
+  function isLongReview(reviewText: string): boolean {
+    return reviewText.trim().split(/\s+/).filter(Boolean).length > 28;
+  }
+
+  function ReviewMediaPreview({ images, reviewName }: { images: ReviewImage[]; reviewName: string }) {
+    if (images.length === 0) return null;
+
+    if (images.length === 1) {
+      return (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openImageViewer(images, 0);
+          }}
+          className="group relative block w-full overflow-hidden rounded-[1.15rem] border border-[#5d4aa5]/18 bg-[linear-gradient(180deg,rgba(25,19,54,0.92)_0%,rgba(15,14,36,0.95)_100%)] text-left shadow-[0_12px_28px_rgba(4,5,18,0.28)] transition-transform duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary/70 focus:ring-offset-2 focus:ring-offset-[#07111f]"
+          aria-label={`Open image for ${reviewName}`}
+        >
+          <div className="relative h-28 w-full overflow-hidden sm:h-32 md:h-36">
+            <img
+              src={images[0].src}
+              alt={images[0].filename || `${reviewName} image 1`}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+          </div>
+        </button>
+      );
+    }
+
+    const deckImages = images.slice(0, 3);
+
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openImageViewer(images, 0);
+        }}
+        className="group relative block w-full text-left focus:outline-none focus:ring-2 focus:ring-primary/70 focus:ring-offset-2 focus:ring-offset-[#07111f]"
+        aria-label={`Open ${images.length} photos for ${reviewName}`}
+      >
+        <div className="relative h-28 w-full overflow-visible sm:h-32 md:h-36">
+          {deckImages.slice(1).map((image, index) => {
+            const layerOffset = index === 0 ? 0.55 : 0.95;
+            const rotation = index === 0 ? -5 : 7;
+
+            return (
+              <div
+                key={image.id}
+                className="absolute inset-0 rounded-[1.15rem] border border-[#5d4aa5]/16 bg-[linear-gradient(180deg,rgba(25,19,54,0.88)_0%,rgba(15,14,36,0.94)_100%)] shadow-[0_14px_34px_rgba(4,5,18,0.22)]"
+                style={{
+                  transform: `translate(${layerOffset}rem, ${layerOffset * 0.55}rem) rotate(${rotation}deg) scale(${0.985 - index * 0.025})`,
+                  zIndex: 10 - index,
+                }}
+              >
+                <img
+                  src={image.src}
+                  alt={image.filename || `${reviewName} photo ${index + 2}`}
+                  className="h-full w-full rounded-[1.15rem] object-cover opacity-90"
+                />
+                <div className="absolute inset-0 rounded-[1.15rem] bg-linear-to-t from-black/25 via-transparent to-transparent" />
+              </div>
+            );
+          })}
+
+          <div className="absolute inset-0 z-20 overflow-hidden rounded-[1.15rem] border border-[#5d4aa5]/18 bg-[linear-gradient(180deg,rgba(25,19,54,0.9)_0%,rgba(15,14,36,0.96)_100%)] shadow-[0_16px_36px_rgba(4,5,18,0.26)] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-[1.01]">
+            <img
+              src={images[0].src}
+              alt={images[0].filename || `${reviewName} photo 1`}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-[#10122a]/82 via-[#10122a]/24 to-transparent" />
+            <div className="absolute left-2.5 top-2.5 rounded-full border border-white/10 bg-[#12142c]/68 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-white/76 backdrop-blur">
+              Tap to view
+            </div>
+            <div className="absolute right-2.5 bottom-2.5 rounded-full border border-white/10 bg-[#12142c]/70 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/84 backdrop-blur">
+              +{images.length - 1} photos
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  }
+
   const starDistribution = useMemo(() => {
     if (reviews.length === 0) return { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     reviews.forEach(r => { dist[r.rating as 1|2|3|4|5]++; });
     return dist;
   }, [reviews]);
+
+  const totalReviews = summary.totalReviews ?? 0;
+  const averageRating = summary.averageRating ?? 0;
+  const sliderReviews = reviews.length > 1 ? [...reviews, ...reviews] : reviews;
 
   useEffect(() => {
     let cancelled = false;
@@ -148,33 +350,135 @@ export function Reviews() {
     };
   }, []);
 
-  const repeatedReviews = useMemo(() => reviews.slice(0, 8), [reviews]);
+  function ReviewCard({ review, index }: { review: ReviewRecord; index: number }) {
+    const reviewText = review.reviewText?.trim() ?? "";
+    const isExpanded = expandedReviewIds[review.id] ?? false;
+    const showReadMore = reviewText.length > 0 && isLongReview(reviewText);
+    const floatOffset = index % 2 === 0 ? -6 : 6;
+
+    return (
+      <motion.article
+        initial={{ opacity: 0, y: 18 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        animate={{ y: [0, floatOffset, 0] }}
+        transition={{
+          opacity: { duration: 0.35 },
+          y: {
+            duration: 6.5 + index * 0.35,
+            repeat: Infinity,
+            ease: "easeInOut",
+            repeatType: "mirror",
+            delay: index * 0.12,
+          },
+        }}
+        viewport={{ once: true, margin: "-40px" }}
+        className="group flex h-full min-h-72 w-66 shrink-0 flex-col overflow-hidden rounded-[1.55rem] border border-[#5d4aa5]/18 bg-[linear-gradient(180deg,rgba(25,19,54,0.88)_0%,rgba(15,14,36,0.95)_100%)] p-3 shadow-[0_16px_40px_rgba(4,5,18,0.24)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-[#7a67c4]/24 hover:shadow-[0_22px_52px_rgba(4,5,18,0.34)] sm:w-70 sm:p-4 md:w-74"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h4 className="truncate text-sm font-medium text-white sm:text-base">{review.name}</h4>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-primary/55 sm:text-[11px]">
+              {review.createdAt ? format(new Date(review.createdAt), "MMM d, yyyy") : ""}
+            </p>
+          </div>
+          <div className="shrink-0 rounded-full border border-[#5d4aa5]/18 bg-white/5 px-2 py-0.5 sm:px-2.5 sm:py-1">
+            <StarRating rating={review.rating} />
+          </div>
+        </div>
+
+        <div className="mt-3 flex-1">
+          {reviewText ? (
+            <p
+              className={`text-sm leading-6 text-white/72 ${isExpanded ? "" : "line-clamp-3"}`}
+            >
+              {reviewText}
+            </p>
+          ) : (
+            <p className="text-sm leading-6 text-white/44 italic">No written review was provided.</p>
+          )}
+
+          {showReadMore ? (
+            <button
+              type="button"
+              onClick={() => toggleReviewExpansion(review.id)}
+              className="mt-2 text-sm font-medium text-primary/90 transition-colors hover:text-primary"
+            >
+              {isExpanded ? "Show less" : "Read more"}
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-3">
+          <ReviewMediaPreview images={review.images} reviewName={review.name} />
+        </div>
+      </motion.article>
+    );
+  }
+
+  useEffect(() => {
+    if (!viewer) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeImageViewer();
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        stepImageViewer(-1);
+      }
+
+      if (event.key === "ArrowRight") {
+        stepImageViewer(1);
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [viewer]);
+
+  useEffect(() => {
+    if (!viewer) {
+      setTouchStartX(null);
+    }
+  }, [viewer]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setFormError(null);
     setFormSuccess(null);
     setIsSubmitting(true);
-    const formEl = event.currentTarget as HTMLFormElement; // capture DOM element to avoid synthetic event pooling
+    const formEl = event.currentTarget as HTMLFormElement;
 
-    const formData = new FormData(event.currentTarget as HTMLFormElement);
+    const formData = new FormData(formEl);
     formData.set("rating", String(selectedRating));
+
+    const reviewTextValue = getReviewTextValue(formEl);
 
     if (selectedRating < 1) {
       setFormError("Please select a rating before submitting your review.");
       setIsSubmitting(false);
       return;
     }
-    
-    // Remove the default photos field and add selected files
-    formData.delete("photos");
-    selectedFiles.forEach((file) => {
-      formData.append("photos", file);
-    });
 
-    console.log("Submitting review to:", apiUrl("/api/reviews"));
-    console.log("Selected files:", selectedFiles);
-    console.log("FormData entries:", Array.from(formData.entries()));
+    if (!isReviewTextLongEnough(reviewTextValue)) {
+      setFormError("Please write at least 10 words about your experience.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // compress images in parallel before upload to reduce payload size & time
+    formData.delete("photos");
+    if (selectedFiles.length > 0) {
+      const compressed = await Promise.all(selectedFiles.map((f) => compressImage(f, 1400, 0.78)));
+      compressed.forEach((file) => formData.append("photos", file));
+    }
 
     try {
       const response = await fetch(apiUrl("/api/reviews"), {
@@ -182,18 +486,14 @@ export function Reviews() {
         body: formData,
       });
 
-      console.log("Response status:", response.status);
-
       let payload: { message?: string; review?: ReviewRecord } | null = null;
       let errorMessage = "";
 
       try {
         const text = await response.text();
-        console.log("Response text:", text);
         payload = text ? JSON.parse(text) : null;
       } catch (parseErr) {
         console.error("Failed to parse JSON response:", parseErr);
-        // Provide user-friendly error messages based on response status
         if (response.status === 404) {
           errorMessage = "Cannot connect to server. Please check that the API server is running and try again.";
         } else if (response.status >= 500) {
@@ -207,10 +507,7 @@ export function Reviews() {
         }
       }
 
-      console.log("Response payload:", payload);
-
       if (!response.ok) {
-        // Use the message from payload if available, otherwise use our constructed error
         const finalErrorMessage = payload?.message || errorMessage || "Unable to submit review. Please try again.";
         throw new Error(finalErrorMessage);
       }
@@ -269,15 +566,21 @@ export function Reviews() {
         .btn-shimmer { background: linear-gradient(90deg, #d4af37 0%, #f0e68c 25%, #d4af37 50%, #f0e68c 75%, #d4af37 100%); background-size: 1000px 100%; animation: shimmer 3s infinite; }
         .btn-shimmer:hover { animation: shimmer 1.5s infinite; }
 
-        /* marquee styles for floating review cards */
-        .marquee { overflow: hidden; }
-        .marquee-track { display: flex; gap: 1rem; width: max-content; align-items: stretch; }
-        @keyframes marquee {
+        @keyframes review-slider {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
-        .marquee-track { animation: marquee 28s linear infinite; }
-        .marquee-track:hover { animation-play-state: paused; }
+        .review-slider-track {
+          display: flex;
+          width: max-content;
+          gap: 1rem;
+          align-items: stretch;
+          animation: review-slider 52s linear infinite;
+        }
+        .review-slider-track:hover {
+          animation-play-state: paused;
+        }
+
       `}</style>
       <div className="mx-auto px-4 mb-16 text-center max-w-5xl">
         <div className="mb-6 inline-block">
@@ -288,112 +591,21 @@ export function Reviews() {
         <p className="mx-auto max-w-2xl text-foreground/60 text-base leading-relaxed">
           Share your reading experience with text, chat screenshots, or both. Your review helps future clients feel confident about their session.
         </p>
-        {/* Mobile: stacked review cards so uploads are always visible */}
-        <div className="lg:hidden mx-auto mt-8 w-full space-y-4">
-          {reviews.length > 0 ? (
-            reviews.slice(0, 4).map((r) => (
-              <div key={r.id} className="mx-4 p-4 rounded-xl backdrop-blur-md bg-white/4 border border-primary/15">
-                <div className="flex items-start justify-between mb-2 gap-2">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-normal text-white truncate">{r.name}</h4>
-                    <p className="text-[11px] text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
-                  </div>
-                  <div className="flex gap-0.5 shrink-0">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Star key={i} className={`w-3 h-3 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />
-                    ))}
-                  </div>
-                </div>
-                {r.reviewText ? <p className="text-xs leading-normal text-foreground/70 mb-2 line-clamp-4">{r.reviewText}</p> : null}
-                {r.images && r.images.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename });
-                    }}
-                    className="block w-full text-left"
-                    aria-label={`View image for ${r.name}`}
-                  >
-                    <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-24 object-cover rounded" />
-                  </button>
-                ) : null}
-              </div>
-            ))
-          ) : (
-            <div className="mx-4 px-4 py-6 rounded-lg backdrop-blur-md bg-white/2 border border-primary/15 text-foreground/60 text-sm text-center">No reviews yet</div>
-          )}
-        </div>
 
-        {/* Desktop: Floating marquee of reviews (only visible on large screens with 3+ reviews) */}
-        <div className="hidden lg:block mx-auto px-4 mt-8 w-full">
-          {reviews.length >= 3 ? (
-            <div className="marquee">
-              <div className="marquee-track">
-                {[...reviews, ...reviews].map((r, idx) => (
-                  <div key={`${r.id}-${idx}`} className="min-w-90 max-w-105 p-6 rounded-2xl backdrop-blur-md bg-white/4 border border-primary/15 transform transition-transform hover:scale-105">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h4 className="text-base font-normal text-white">{r.name}</h4>
-                        <p className="text-xs text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        {[1,2,3,4,5].map(i => <Star key={i} className={`w-4 h-4 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />)}
-                      </div>
-                    </div>
-                    {r.reviewText ? <p className="text-sm leading-normal text-foreground/70 mb-3">{r.reviewText}</p> : null}
-                    {r.images && r.images.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename })}
-                        className="block w-full text-left"
-                        aria-label={`View image for ${r.name}`}
-                      >
-                        <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : reviews.length > 0 ? (
-            <div className="mx-auto max-w-fit flex flex-wrap justify-center gap-6">
-              {reviews.map((r) => (
-                <div key={r.id} className="w-90 p-6 rounded-2xl backdrop-blur-md bg-white/4 border border-primary/15 transform transition-transform hover:scale-105">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="text-base font-normal text-white">{r.name}</h4>
-                      <p className="text-xs text-primary/50">{r.createdAt ? format(new Date(r.createdAt), "MMM d, yyyy") : ""}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      {[1,2,3,4,5].map(i => <Star key={i} className={`w-4 h-4 ${i <= r.rating ? "fill-primary text-primary" : "text-primary/20"}`} />)}
-                    </div>
-                  </div>
-                  {r.reviewText ? <p className="text-sm leading-normal text-foreground/70 mb-3">{r.reviewText}</p> : null}
-                  {r.images && r.images.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setSelectedImage({ src: r.images[0].src, alt: r.images[0].filename });
-                      }}
-                      className="block w-full text-left"
-                      aria-label={`View image for ${r.name}`}
-                    >
-                      <img src={r.images[0].src} alt={r.images[0].filename} className="w-full h-36 object-cover rounded-lg" />
-                    </button>
-                  ) : null}
-                </div>
+        <div className="mx-auto mt-8 w-full overflow-hidden">
+          {reviews.length > 0 ? (
+            <div className="review-slider-track py-2">
+              {sliderReviews.map((review, index) => (
+                <ReviewCard key={`${review.id}-${index}`} review={review} index={index} />
               ))}
             </div>
           ) : (
-            <div className="mx-auto max-w-fit">
-              <div className="px-6 py-8 rounded-lg backdrop-blur-md bg-white/2 border border-primary/15 text-foreground/60">No reviews yet</div>
+            <div className="mx-auto w-full max-w-xl rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(11,10,22,0.82)_0%,rgba(8,8,18,0.9)_100%)] px-6 py-10 text-center text-foreground/60 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
+              No reviews yet
             </div>
           )}
         </div>
+
       </div>
 
       <div className="mx-auto px-4 grid gap-0 lg:gap-8 lg:grid-cols-12 items-start max-w-5xl">
@@ -442,9 +654,15 @@ export function Reviews() {
                 <textarea 
                   name="reviewText" 
                   rows={4} 
+                  required
+                  minLength={50}
+                  aria-describedby="reviewText-help"
                   className="w-full resize-none bg-transparent px-0 py-2 text-white text-sm border-b border-primary/30 outline-none transition-colors focus:border-primary/80 placeholder:text-white/20" 
                   placeholder="Share how the reading helped you..." 
                 />
+                <p id="reviewText-help" className="text-[11px] text-foreground/45">
+                  Please write at least 50 characters or 10 words.
+                </p>
               </label>
 
               <label htmlFor="photos-upload" className={`space-y-2 md:col-span-2 cursor-pointer group relative block ${dragOver ? "bg-primary/5 border-primary/40" : ""} p-6 rounded-xl border-2 border-dashed transition-all ${dragOver ? "border-primary/40" : "border-primary/20"}`}
@@ -517,22 +735,22 @@ export function Reviews() {
             <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary to-transparent"></div>
             <div>
               <div className="text-xs font-light uppercase tracking-widest text-primary/70 mb-2">Total Reviews</div>
-                <div className="heading-luxury text-4xl text-white">{formatReviewCount(summary.totalReviews)}</div>
+                <div className="heading-luxury text-4xl text-white">{formatReviewCount(totalReviews)}</div>
             </div>
             <div className="mt-6 pt-6 border-t border-primary/10">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-light uppercase tracking-widest text-primary/70">Average Rating</span>
                 <div className="flex gap-0.5">
-                  {[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= Math.round(summary.averageRating ?? 0) ? "fill-primary text-primary" : "text-primary/20"}`} />)}
+                  {[1,2,3,4,5].map(i => <Star key={i} className={`w-3 h-3 ${i <= Math.round(averageRating) ? "fill-primary text-primary" : "text-primary/20"}`} />)}
                 </div>
               </div>
-              <div className="heading-luxury text-3xl text-white">{summary.totalReviews > 0 ? (summary.averageRating ?? 0).toFixed(1) : "0"}</div>
+              <div className="heading-luxury text-3xl text-white">{totalReviews > 0 ? averageRating.toFixed(1) : "0"}</div>
               
               {/* Star distribution bar */}
               <div className="mt-4 space-y-1">
                 {[5,4,3,2,1].map(stars => {
                   const count = starDistribution[stars as 1|2|3|4|5];
-                  const pct = summary.totalReviews > 0 ? (count / summary.totalReviews) * 100 : 0;
+                  const pct = totalReviews > 0 ? (count / totalReviews) * 100 : 0;
                   return (
                     <div key={stars} className="flex items-center gap-2">
                       <span className="text-xs text-primary/60 w-4">{stars}★</span>
@@ -546,20 +764,19 @@ export function Reviews() {
             </div>
           </motion.div>
 
-          {/* Removed inline recent reviews list — reviews are shown in the floating marquee above */}
         </aside>
       </div>
 
-      {selectedImage ? (
+      {viewer ? (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Review image viewer"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-8"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-8"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setSelectedImage(null);
+            closeImageViewer();
           }}
         >
           <button
@@ -567,18 +784,77 @@ export function Reviews() {
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              setSelectedImage(null);
+              closeImageViewer();
             }}
-            className="absolute right-4 top-4 rounded-full bg-white/10 px-4 py-2 text-sm text-white backdrop-blur hover:bg-white/20"
+            className="absolute right-4 top-4 rounded-full bg-white/10 px-4 py-2 text-sm text-white backdrop-blur transition-colors hover:bg-white/20"
+            aria-label="Close image viewer"
           >
-            Close
+            ×
           </button>
-          <img
-            src={selectedImage.src}
-            alt={selectedImage.alt}
-            className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl"
+
+          <div
+            className="relative flex w-full max-w-6xl items-center justify-center"
             onClick={(event) => event.stopPropagation()}
-          />
+            onTouchStart={(event) => setTouchStartX(event.touches[0]?.clientX ?? null)}
+            onTouchEnd={(event) => {
+              const startX = touchStartX;
+              if (startX === null) return;
+
+              const endX = event.changedTouches[0]?.clientX ?? startX;
+              const delta = endX - startX;
+
+              if (Math.abs(delta) > 40) {
+                stepImageViewer(delta > 0 ? -1 : 1);
+              }
+
+              setTouchStartX(null);
+            }}
+          >
+            {viewer.images.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => stepImageViewer(-1)}
+                className="absolute left-0 sm:-left-14 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur transition-colors hover:bg-white/20"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+              </button>
+            ) : null}
+
+            <figure className="flex w-full max-w-5xl flex-col items-center gap-3">
+              <div className="flex w-full items-center justify-center">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.img
+                    key={`${viewer.currentIndex}-${viewer.images[viewer.currentIndex]?.id ?? "image"}`}
+                    src={viewer.images[viewer.currentIndex]?.src}
+                    alt={viewer.images[viewer.currentIndex]?.filename || "Review image"}
+                    className="max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
+                    initial={{ opacity: 0, x: viewerDirection > 0 ? 80 : -80, scale: 0.98 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: viewerDirection > 0 ? -80 : 80, scale: 0.98 }}
+                    transition={{ duration: 0.24, ease: "easeOut" }}
+                  />
+                </AnimatePresence>
+              </div>
+              <figcaption className="flex w-full items-center justify-between gap-3 text-sm text-white/80">
+                <span>
+                  {viewer.currentIndex + 1} / {viewer.images.length}
+                </span>
+                <span className="truncate text-right">{viewer.images[viewer.currentIndex]?.filename}</span>
+              </figcaption>
+            </figure>
+
+            {viewer.images.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => stepImageViewer(1)}
+                className="absolute right-0 sm:-right-14 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur transition-colors hover:bg-white/20"
+                aria-label="Next image"
+              >
+                <ChevronRight className="h-6 w-6" aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </section>

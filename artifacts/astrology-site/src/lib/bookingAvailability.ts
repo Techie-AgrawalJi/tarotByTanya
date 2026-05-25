@@ -28,6 +28,17 @@ export const TIME_BLOCKS: Record<TimeBlockKey, { startMinutes: number; endMinute
 const BUFFER_MINUTES = 5;
 const STEP_MINUTES = 5;
 
+function getLocalDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getRoundedUpMinutes(minutes: number, stepMinutes: number): number {
+  return Math.ceil(minutes / stepMinutes) * stepMinutes;
+}
+
 export function getApiBaseUrl(): string {
   const configuredBase = String((import.meta as any).env?.VITE_API_BASE_URL ?? (import.meta as any).env?.VITE_API_BASE ?? "")
     .trim()
@@ -148,10 +159,18 @@ export function buildAvailabilityGrid(params: {
   bookings: BookingRange[];
 }): AvailabilityCell[] {
   const block = TIME_BLOCKS[params.blockKey];
+  if (params.slotDate < getLocalDateString()) {
+    return [];
+  }
+
   const activeBookings = getActiveBookingsForBlock(params.bookings, params.slotDate, params.blockKey);
   const cells: AvailabilityCell[] = [];
+  const isToday = params.slotDate === getLocalDateString();
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const minimumMinutes = isToday ? Math.max(block.startMinutes, getRoundedUpMinutes(currentMinutes, STEP_MINUTES)) : block.startMinutes;
 
-  for (let minutes = block.startMinutes; minutes <= block.endMinutes - params.durationMinutes; minutes += STEP_MINUTES) {
+  for (let minutes = minimumMinutes; minutes <= block.endMinutes - params.durationMinutes; minutes += STEP_MINUTES) {
     const sessionEnd = minutes + params.durationMinutes;
     const bufferEnd = sessionEnd + BUFFER_MINUTES;
     const conflictingBooking = activeBookings.find((booking) => overlaps(minutes, bufferEnd, booking));

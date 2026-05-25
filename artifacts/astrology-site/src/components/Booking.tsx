@@ -77,7 +77,15 @@ function scrollToSection(id: string): void {
   }
 }
 
+function getLocalDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function Booking() {
+  const today = getLocalDateString();
   const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -96,7 +104,7 @@ export function Booking() {
   const serviceMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedBlock, setSelectedBlock] = useState<TimeBlockKey | "">("");
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(today);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [availabilityBookings, setAvailabilityBookings] = useState<BookingRange[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -112,7 +120,10 @@ export function Booking() {
   `;
 
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<FormData>({
-    resolver: zodResolver(formSchema)
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      date: today,
+    },
   });
 
   const watchedService = watch("service");
@@ -154,11 +165,16 @@ export function Booking() {
     }
     if (typeof payload.duration === "string") setValue("duration", payload.duration, { shouldValidate: true, shouldDirty: true });
     if (typeof payload.date === "string") {
-      setSelectedDate(payload.date);
-      setValue("date", payload.date, { shouldValidate: true, shouldDirty: true });
+      if (payload.date >= today) {
+        setSelectedDate(payload.date);
+        setValue("date", payload.date, { shouldValidate: true, shouldDirty: true });
+      } else {
+        setSelectedDate(today);
+        setValue("date", today, { shouldValidate: true, shouldDirty: true });
+      }
     }
     if (typeof payload.message === "string") setValue("message", payload.message);
-  }, [setValue]);
+  }, [setValue, today]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -276,16 +292,17 @@ export function Booking() {
   const firstOpenSlot = hasLiveAvailability
     ? availabilityGrid.find((cell) => cell.status === "available")?.time || ""
     : "";
+  const isPastSelectedDate = Boolean(selectedDate && selectedDate < today);
   const isBookingDisabled = guideAvailabilityLoading ? false : !guideAvailable;
   const submitButtonDisabled = isSubmitting || isBookingDisabled || (requiresSlotSelection && (availabilityLoading || !selectedDuration || !selectedDate || !selectedBlock || !selectedSlot || !isSelectedSlotAvailable));
 
   useEffect(() => {
     const shouldFetch = Boolean(selectedDate && selectedBlock && selectedDurationMinutes);
 
-    if (!shouldFetch) {
+    if (!shouldFetch || isPastSelectedDate) {
       setAvailabilityBookings([]);
       setAvailabilityLoading(false);
-      setAvailabilityError("");
+      setAvailabilityError(isPastSelectedDate ? "Please select today or a future date." : "");
       return;
     }
 
@@ -324,13 +341,18 @@ export function Booking() {
       cancelled = true;
       controller.abort();
     };
-  }, [selectedDate, selectedBlock, selectedDurationMinutes]);
+  }, [selectedDate, selectedBlock, selectedDurationMinutes, isPastSelectedDate]);
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
       if (isBookingDisabled) {
         alert(guideAvailabilityMessage || "Guide is not available today. Please try again later.");
+        return;
+      }
+
+      if (isPastSelectedDate) {
+        alert("Please select today or a future date.");
         return;
       }
 
@@ -757,11 +779,17 @@ export function Booking() {
                 <input 
                   {...register("date")}
                   type="date"
-                  min={new Date().toISOString().split("T")[0]}
+                  min={today}
+                  defaultValue={today}
                   data-testid="input-date"
                   onChange={(e) => {
-                    setValue("date", e.target.value, { shouldValidate: true, shouldDirty: true });
-                    setSelectedDate(e.target.value);
+                    const nextDate = e.target.value >= today ? e.target.value : today;
+                    if (nextDate !== e.target.value) {
+                      e.target.value = nextDate;
+                    }
+
+                    setValue("date", nextDate, { shouldValidate: true, shouldDirty: true });
+                    setSelectedDate(nextDate);
                     setSelectedSlot("");
                     setSelectedBlock("");
                     setAvailabilityBookings([]);

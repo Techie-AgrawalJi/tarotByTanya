@@ -37,8 +37,9 @@ const reviewInputSchema = z.object({
     .string()
     .trim()
     .max(4000)
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : null)),
+    .refine((value) => value.split(/\s+/).filter(Boolean).length >= 10, {
+      message: "Your review must be at least 10 words long.",
+    }),
 });
 
 type ReviewApiImage = {
@@ -129,11 +130,6 @@ router.post("/reviews", upload.array("photos", 4), async (req, res) => {
     }
 
     const files = Array.isArray(req.files) ? req.files : [];
-
-    if (!parsed.data.reviewText && files.length === 0) {
-      res.status(400).json({ message: "Add text, photos, or both before submitting your review." });
-      return;
-    }
 
     // Upload images to Cloudinary
     const uploadedImages = await Promise.all(
