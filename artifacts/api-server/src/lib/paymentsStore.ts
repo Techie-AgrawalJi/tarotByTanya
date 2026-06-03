@@ -2,6 +2,18 @@ import { getPaymentModel } from "./mongoose";
 
 type PaymentRecord = Record<string, any>;
 
+function normalizePaymentRecord(payment: PaymentRecord): PaymentRecord {
+  const id = String(payment.id || payment.orderId || `payment_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`);
+  const normalized = {
+    ...payment,
+    id,
+  };
+  if ("_id" in normalized) {
+    delete normalized._id;
+  }
+  return normalized;
+}
+
 export async function readPayments(): Promise<PaymentRecord[]> {
   const Payment = await getPaymentModel();
   return (await Payment.find({}).sort({ createdAt: 1, _id: 1 }).lean<PaymentRecord>().exec()) as PaymentRecord[];
@@ -14,10 +26,7 @@ export async function writePayments(payments: PaymentRecord[]): Promise<void> {
     return;
   }
 
-  const normalizedPayments = payments.map((payment) => ({
-    ...payment,
-    id: String(payment.id || payment.orderId || `payment_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`),
-  }));
+  const normalizedPayments = payments.map(normalizePaymentRecord);
 
   const ids = normalizedPayments.map((payment) => payment.id).filter(Boolean);
 
@@ -37,10 +46,7 @@ export async function writePayments(payments: PaymentRecord[]): Promise<void> {
 
 export async function insertPayment(payment: PaymentRecord): Promise<PaymentRecord> {
   const Payment = await getPaymentModel();
-  const normalized = {
-    ...payment,
-    id: String(payment.id || payment.orderId || `payment_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`),
-  };
+  const normalized = normalizePaymentRecord(payment);
 
   await Payment.updateOne({ id: normalized.id }, { $set: normalized }, { upsert: true }).exec();
   return normalized;
@@ -48,7 +54,11 @@ export async function insertPayment(payment: PaymentRecord): Promise<PaymentReco
 
 export async function updatePaymentById(id: string, update: Partial<PaymentRecord>): Promise<PaymentRecord | null> {
   const Payment = await getPaymentModel();
-  await Payment.updateOne({ id }, { $set: update }).exec();
+  const safeUpdate = { ...update };
+  if ("_id" in safeUpdate) {
+    delete safeUpdate._id;
+  }
+  await Payment.updateOne({ id }, { $set: safeUpdate }).exec();
   return await Payment.findOne({ id }).lean<PaymentRecord>().exec();
 }
 

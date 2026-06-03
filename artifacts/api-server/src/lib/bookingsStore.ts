@@ -16,7 +16,7 @@ function normalizeBookingRecord(booking: BookingRecord): BookingRecord {
   // Ensure bookingTime exists for admin display
   const bookingTime = String(booking.bookingTime || booking.heldAt || booking.raw?.bookingTime || booking.raw?.createdAt || booking.raw?.created_at || "").trim();
 
-  return {
+  const normalized = {
     ...booking,
     id,
     slotDate,
@@ -25,6 +25,11 @@ function normalizeBookingRecord(booking: BookingRecord): BookingRecord {
     clientEmail,
     bookingTime,
   };
+  if ("_id" in normalized) {
+    delete normalized._id;
+  }
+
+  return normalized;
 }
 
 export async function readBookings() {
