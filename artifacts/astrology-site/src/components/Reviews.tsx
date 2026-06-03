@@ -589,7 +589,7 @@ export function Reviews() {
         </div>
         <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">Words After the Reading</h3>
         <p className="mx-auto max-w-2xl text-foreground/60 text-base leading-relaxed">
-          Share your reading experience with text, chat screenshots, or both. Your review helps future clients feel confident about their session.
+          Share your reading experience in your own words. Your review helps future clients feel confident about their session.
         </p>
 
         <div className="mx-auto mt-8 w-full overflow-hidden">

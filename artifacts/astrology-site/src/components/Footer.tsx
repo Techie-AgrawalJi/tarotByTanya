@@ -34,6 +34,7 @@ export function Footer() {
             >
               <Phone className="w-4 h-4 text-primary shrink-0" />
               <span>+91 78770 82223</span>
+              <SiWhatsapp className="w-4 h-4 text-[#25D366] shrink-0" />
             </a>
             <a
               href="https://wa.me/917877082223?text=Namaste!%20Mujhe%20ek%20reading%20book%20karni%20hai."
