@@ -116,6 +116,19 @@
   --sidebar-ring: 44 55% 54%;
 }
 
+.admin-font {
+  font-family: var(--app-font-sans) !important;
+}
+
+.admin-font h1,
+.admin-font h2,
+.admin-font h3,
+.admin-font h4,
+.admin-font h5,
+.admin-font h6 {
+  font-family: var(--app-font-serif) !important;
+}
+
 .dark {
   --background: 240 45% 7%;
   --foreground: 259 41% 76%;

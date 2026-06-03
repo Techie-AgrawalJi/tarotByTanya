@@ -116,7 +116,7 @@ export default function Admin() {
   if (!isAuthenticated) {
     return (
       <main
-        className="relative isolate flex min-h-screen items-center justify-center overflow-hidden font-serif text-white"
+        className="admin-font relative isolate flex min-h-screen items-center justify-center overflow-hidden text-white"
         style={{ background: "#12112a" }}
       >
         <Candles />
@@ -125,7 +125,7 @@ export default function Admin() {
           <div className="mx-auto w-full max-w-95 rounded-2xl border border-[rgba(212,180,106,0.28)] bg-[rgba(14,13,32,0.72)] px-9 py-9 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-md animate-[cardIn_0.9s_cubic-bezier(0.22,1,0.36,1)_both]">
             <div className="mb-7 flex justify-start">
               <Link href="/">
-                <button className="inline-flex items-center gap-1.5 border-none bg-transparent text-[13px] tracking-[0.04em] text-[rgba(255,255,255,0.28)] transition-colors hover:text-[#d4b46a]">
+                <button className="inline-flex items-center gap-2 border-none bg-transparent text-sm md:text-base tracking-[0.04em] text-white/70 transition-colors hover:text-[#d4b46a]">
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </button>
@@ -144,12 +144,12 @@ export default function Admin() {
             <div className="mb-6 h-px bg-[rgba(255,255,255,0.07)]" />
 
             <p className="mb-7 text-center font-serif text-[10.5px] font-normal uppercase tracking-[0.22em] text-[rgba(255,255,255,0.28)]">
-              ADMIN PORTAL
+              Admin Login
             </p>
 
             <form onSubmit={handleLogin} className="space-y-[1.1rem]">
               <div className="space-y-1.5">
-                <label className="font-serif text-[10px] uppercase tracking-[0.15em] text-[rgba(255,255,255,0.28)]">
+                <label className="font-serif text-[11px] md:text-sm uppercase tracking-[0.14em] text-white/70 font-semibold">
                   Email
                 </label>
                 <div className="relative">
@@ -171,7 +171,7 @@ export default function Admin() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-serif text-[10px] uppercase tracking-[0.15em] text-[rgba(255,255,255,0.28)]">
+                <label className="font-serif text-[11px] md:text-sm uppercase tracking-[0.14em] text-white/70 font-semibold">
                   Password
                 </label>
                 <div className="relative">
@@ -217,14 +217,16 @@ export default function Admin() {
   }
 
   return (
-    <main className="relative isolate min-h-screen overflow-hidden bg-[#090712] font-sans text-foreground">
+    <main
+      className="admin-font relative isolate min-h-screen overflow-hidden bg-[#090712] text-foreground text-base md:text-lg lg:text-xl"
+    >
       <Candles />
 
       <div className="relative z-10 mx-auto w-full max-w-4xl px-4 py-12 md:px-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-semibold text-white">Admin Dashboard</h2>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold text-white">Admin Dashboard</h2>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={async () => {
                 const nextAvailable = !guideAvailable;
@@ -281,12 +283,15 @@ export default function Admin() {
                   alert("Failed to clear bookings");
                 }
               }}
-              className="rounded bg-white/5 px-3 py-2 text-white"
+              className="rounded bg-white/5 px-3 py-2 text-white text-sm min-w-[5.5rem]"
             >
               Clear All
             </button>
 
-            <button onClick={handleLogout} className="rounded bg-white/5 px-3 py-2 text-white">
+            <button
+              onClick={handleLogout}
+              className="rounded bg-white/5 px-3 py-2 text-white text-sm min-w-[5.5rem]"
+            >
               Logout
             </button>
           </div>
