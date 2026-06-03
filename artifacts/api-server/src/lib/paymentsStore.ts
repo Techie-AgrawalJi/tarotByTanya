@@ -9,12 +9,47 @@ export async function readPayments(): Promise<PaymentRecord[]> {
 
 export async function writePayments(payments: PaymentRecord[]): Promise<void> {
   const Payment = await getPaymentModel();
-
-  await Payment.deleteMany({});
-
-  if (payments.length > 0) {
-    await Payment.insertMany(payments, { ordered: true });
+  if (payments.length === 0) {
+    await Payment.deleteMany({});
+    return;
   }
+
+  const normalizedPayments = payments.map((payment) => ({
+    ...payment,
+    id: String(payment.id || payment.orderId || `payment_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`),
+  }));
+
+  const ids = normalizedPayments.map((payment) => payment.id).filter(Boolean);
+
+  await Payment.bulkWrite(
+    normalizedPayments.map((payment) => ({
+      updateOne: {
+        filter: { id: payment.id },
+        update: { $set: payment },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
+
+  await Payment.deleteMany({ id: { $nin: ids } });
+}
+
+export async function insertPayment(payment: PaymentRecord): Promise<PaymentRecord> {
+  const Payment = await getPaymentModel();
+  const normalized = {
+    ...payment,
+    id: String(payment.id || payment.orderId || `payment_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`),
+  };
+
+  await Payment.updateOne({ id: normalized.id }, { $set: normalized }, { upsert: true }).exec();
+  return normalized;
+}
+
+export async function updatePaymentById(id: string, update: Partial<PaymentRecord>): Promise<PaymentRecord | null> {
+  const Payment = await getPaymentModel();
+  await Payment.updateOne({ id }, { $set: update }).exec();
+  return await Payment.findOne({ id }).lean<PaymentRecord>().exec();
 }
 
 export async function findPaymentById(id: string): Promise<PaymentRecord | null> {

@@ -110,6 +110,7 @@ export function Booking() {
   const [availabilityBookings, setAvailabilityBookings] = useState<BookingRange[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState("");
+  const [availabilityFetchedKey, setAvailabilityFetchedKey] = useState("");
   const [slotHint, setSlotHint] = useState("");
   const [guideAvailable, setGuideAvailable] = useState(true);
   const [guideAvailabilityLoading, setGuideAvailabilityLoading] = useState(true);
@@ -288,6 +289,8 @@ export function Booking() {
       })
     : [];
   const hasLiveAvailability = Boolean(selectedDate && selectedBlock && selectedDurationMinutes && !availabilityLoading && !availabilityError);
+  const currentAvailabilityKey = selectedDate && selectedBlock && selectedDurationMinutes ? `${selectedDate}|${selectedBlock}|${selectedDurationMinutes}` : "";
+  const hasLiveAvailabilityFetched = availabilityFetchedKey === currentAvailabilityKey && !availabilityLoading && !availabilityError;
   const selectedGridCell = availabilityGrid.find((cell) => cell.time === selectedSlot);
   const isSelectedSlotAvailable = Boolean(selectedGridCell && selectedGridCell.status === "available");
   const selectedBlockSummary = selectedBlock ? getBlockSummaryLabel(selectedBlock) : "";
@@ -329,6 +332,7 @@ export function Booking() {
       .then((bookings) => {
         if (cancelled) return;
         setAvailabilityBookings(bookings || []);
+        setAvailabilityFetchedKey(currentAvailabilityKey);
         setAvailabilityLoading(false);
       })
       .catch((error) => {
@@ -928,6 +932,8 @@ export function Booking() {
                           <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-sm text-destructive">
                             Live slots could not be loaded right now. Please retry in a moment.
                           </div>
+                        ) : availabilityLoading && availabilityBookings.length === 0 ? (
+                          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-sm text-white/70">Checking live availability...</div>
                         ) : (
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(108px,1fr))] gap-2 max-h-80 overflow-y-auto pr-1">
                           {availabilityGrid.map((cell) => {

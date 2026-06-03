@@ -109,7 +109,9 @@ async function hydrateBookingsFromPaidPayments() {
     }
   }
 
-  if (changed) await writeBookings(bookings);
+  // Do not persist normalization on read. This function is only intended to
+  // normalize booking fields for runtime consumption and should not rewrite
+  // the booking collection on every API request.
   return bookings;
 }
 

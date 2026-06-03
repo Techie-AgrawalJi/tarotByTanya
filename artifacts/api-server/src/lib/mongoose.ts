@@ -5,7 +5,11 @@ const MONGODB_URI = process.env.MONGODB_URI?.trim();
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME?.trim() || undefined;
 
 if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI must be set before using Mongo-backed booking storage.");
+  // Do not throw when running in local/dev without a MongoDB URL.
+  // Higher-level code may provide file-based fallbacks (see bookingsStore).
+  // Log a gentle warning so developers know DB is not configured.
+  // eslint-disable-next-line no-console
+  console.warn("MONGODB_URI is not set — running without MongoDB. Falling back to file storage where supported.");
 }
 
 type LooseDocument = Record<string, any>;
@@ -91,7 +95,12 @@ function getDatabaseOptions() {
 
 export async function connectMongo() {
   if (!connectPromise) {
-    connectPromise = mongoose.connect(MONGODB_URI!, getDatabaseOptions()).then(() => mongoose);
+    if (!MONGODB_URI) {
+      // No DB configured — make connectMongo a resolved promise so callers can continue.
+      connectPromise = Promise.resolve(mongoose);
+    } else {
+      connectPromise = mongoose.connect(MONGODB_URI!, getDatabaseOptions()).then(() => mongoose);
+    }
   }
 
   return connectPromise;

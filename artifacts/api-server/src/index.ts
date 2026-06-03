@@ -18,11 +18,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function start() {
-  if (process.env.RESET_BOOKING_METRICS_ON_STARTUP === "1") {
-    await resetBookingMetrics();
-  } else {
-    await bootstrapBookingMetrics();
-  }
+  // Force a fresh metrics state on startup so counters begin at zero.
+  await resetBookingMetrics();
 
   app.listen(port, (err) => {
     if (err) {
