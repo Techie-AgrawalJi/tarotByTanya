@@ -32,6 +32,34 @@ function getLocalDateString(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+// sendEmailOnce: sends confirmation emails and marks the booking so they are never
+// sent again, even if createBookingFromPayment or verify-payment are called
+// multiple times for the same booking (e.g. held → booked transition + fallthrough).
+async function sendEmailOnce(booking: any): Promise<void> {
+  if (booking._emailSent) return; // already sent in this request cycle
+  booking._emailSent = true;
+
+  const clientConfirmation = await sendBookingEmailConfirmation(booking);
+  if (!clientConfirmation.sent && clientConfirmation.reason && clientConfirmation.reason !== "missing_email") {
+    console.warn("Booking confirmation email failed", {
+      bookingId: booking.id,
+      recipient: "client",
+      reason: clientConfirmation.reason,
+      error: clientConfirmation.error,
+    });
+  }
+
+  const guideConfirmation = await sendBookingEmailConfirmation(booking, { isGuideEmail: true });
+  if (!guideConfirmation.sent && guideConfirmation.reason && guideConfirmation.reason !== "missing_email") {
+    console.warn("Booking confirmation email failed", {
+      bookingId: booking.id,
+      recipient: "guide",
+      reason: guideConfirmation.reason,
+      error: guideConfirmation.error,
+    });
+  }
+}
+
 async function createBookingFromPayment(paymentRecord: any, paymentRecordId: string, gatewayPaymentId = "") {
   if (!(await isGuideAvailable())) {
     const error = new Error("Guide is not available today.") as Error & { statusCode?: number };
@@ -68,10 +96,13 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
     }
   }
 
+  // Idempotency guard — return existing booking without re-sending email
   const existing = bookings.find((booking: any) => {
     const bookingPaymentReference = String(booking.paymentReference || "");
-    const bookingGatewayPaymentId = String(booking.gatewayPaymentId || booking.razorpayPaymentId || booking.raw?.paymentId || booking.raw?.razorpay_payment_id || "");
-
+    const bookingGatewayPaymentId = String(
+      booking.gatewayPaymentId || booking.razorpayPaymentId ||
+      booking.raw?.paymentId || booking.raw?.razorpay_payment_id || ""
+    );
     return (
       bookingPaymentReference === paymentRecordId ||
       (gatewayPaymentId && bookingGatewayPaymentId === gatewayPaymentId)
@@ -79,10 +110,11 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
   });
 
   if (existing) {
+    // Booking already exists — do NOT send another email
     return existing;
   }
 
-  const booking = {
+  const booking: any = {
     id: payload.id || `booking_${Date.now()}`,
     clientName: payload.name || payload.clientName || "",
     clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
@@ -100,16 +132,16 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
     gatewayPaymentId,
     status: "BOOKED",
     bookingTime: new Date().toISOString(),
+    payload,
     raw: payload,
   };
 
   bookings.push(booking);
   await writeBookings(bookings);
   await recordConfirmedBooking(booking);
-  const confirmation = await sendBookingEmailConfirmation(booking);
-  if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
-    console.warn("Booking confirmation email failed", { bookingId: booking.id, reason: confirmation.reason, error: confirmation.error });
-  }
+
+  // Send email exactly once here
+  await sendEmailOnce(booking);
 
   return booking;
 }
@@ -203,7 +235,10 @@ router.post("/create-order", async (req, res) => {
       key_id: keyId,
     });
   } catch (err) {
-    const statusCode = typeof err === "object" && err && "statusCode" in err ? Number((err as { statusCode?: number }).statusCode) : 500;
+    const statusCode =
+      typeof err === "object" && err && "statusCode" in err
+        ? Number((err as { statusCode?: number }).statusCode)
+        : 500;
     return res.status(statusCode === 401 ? 401 : statusCode === 400 ? 400 : 500).json({
       ok: false,
       error: err instanceof Error ? err.message : String(err),
@@ -242,7 +277,11 @@ router.post("/verify-payment", async (req, res) => {
     }
 
     const payments = await readPayments();
-    const index = payments.findIndex((entry: any) => entry.orderId === orderId || entry.id === String(body.payment_record_id || body.paymentId || ""));
+    const index = payments.findIndex(
+      (entry: any) =>
+        entry.orderId === orderId ||
+        entry.id === String(body.payment_record_id || body.paymentId || ""),
+    );
 
     if (index === -1) {
       return res.status(404).json({ ok: false, error: "Payment record not found." });
@@ -256,7 +295,7 @@ router.post("/verify-payment", async (req, res) => {
 
     await writePayments(payments);
 
-    // Reservation/HELD handling: prefer claiming an existing HELD reservation created at checkout.
+    // ── Held reservation path ────────────────────────────────────────────
     try {
       const payload = payments[index].payload || {};
       const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
@@ -267,34 +306,36 @@ router.post("/verify-payment", async (req, res) => {
 
       const bookings = await readBookings();
 
-      // Find a HELD reservation that matches this payment (preferred)
+      // Claim an existing HELD reservation that belongs to this payment
       const heldByThis = bookings.find((b: any) => {
         if (b.status !== "HELD") return false;
-
         const bookingPaymentReference = String(b.paymentReference || "");
-        const bookingGatewayPaymentId = String(b.gatewayPaymentId || b.razorpayPaymentId || b.raw?.paymentId || b.raw?.razorpay_payment_id || "");
-
-        return bookingPaymentReference === payments[index].id || bookingGatewayPaymentId === paymentId;
+        const bookingGatewayPaymentId = String(
+          b.gatewayPaymentId || b.razorpayPaymentId ||
+          b.raw?.paymentId || b.raw?.razorpay_payment_id || ""
+        );
+        return (
+          bookingPaymentReference === payments[index].id ||
+          bookingGatewayPaymentId === paymentId
+        );
       });
 
       if (heldByThis) {
-        // Claim the reservation for this exact payment even if the hold window elapsed.
-        // The payment itself is the source of truth; expiry is only used to block other users' holds.
         heldByThis.status = "BOOKED";
         heldByThis.paymentStatus = "PAID";
-        // Keep the internal payment record id as the canonical reference.
         heldByThis.paymentReference = payments[index].id;
         heldByThis.gatewayPaymentId = paymentId;
         heldByThis.paymentMethod = "Razorpay";
         heldByThis.paymentAmount = payments[index].amount || heldByThis.paymentAmount || 0;
         heldByThis.bookingTime = heldByThis.bookingTime || new Date().toISOString();
+
         await writeBookings(bookings);
         await recordConfirmedBooking(heldByThis);
-        const heldConfirmation = await sendBookingEmailConfirmation(heldByThis);
-        if (!heldConfirmation.sent && heldConfirmation.reason && heldConfirmation.reason !== "missing_email") {
-          console.warn("Booking confirmation email failed", { bookingId: heldByThis.id, reason: heldConfirmation.reason, error: heldConfirmation.error });
-        }
-        const booking = heldByThis;
+
+        // ✅ Send email ONCE here for held → booked path, then return immediately.
+        // Do NOT fall through to createBookingFromPayment below.
+        await sendEmailOnce(heldByThis);
+
         if (returnUrl) {
           const url = new URL(returnUrl);
           url.searchParams.set("payment_status", "success");
@@ -303,28 +344,31 @@ router.post("/verify-payment", async (req, res) => {
           url.searchParams.set("order_id", orderId);
           return res.redirect(303, url.toString());
         }
-        return res.json({ ok: true, verified: true, payment: payments[index], booking });
+        return res.json({ ok: true, verified: true, payment: payments[index], booking: heldByThis });
       }
 
-      // If no held reservation for this payment, check whether another active HELD blocks the slot
+      // Check for slot conflict from another user's active hold
       if (slotDate && slotStart) {
         const conflictHeld = bookings.find((b: any) => {
           if (b.status !== "HELD" && b.status !== "BOOKED") return false;
-          const bDate = b.slotDate || (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) || (b.raw && b.raw.date) || "";
-          const bStart = b.startTime || (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
+          const bDate =
+            b.slotDate ||
+            (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) ||
+            (b.raw && b.raw.date) || "";
+          const bStart =
+            b.startTime ||
+            (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
           if (String(bDate) !== slotDate || String(bStart) !== slotStart) return false;
-          if (b.status === "BOOKED" && b.status !== "CANCELLED") return true;
+          if (b.status === "BOOKED") return true;
           if (b.status === "HELD") {
             const heldAt = b.heldAt ? new Date(b.heldAt).getTime() : 0;
             if (!heldAt) return true;
-            if (Date.now() - heldAt <= HELD_TTL_MS) return true; // still reserved
-            return false; // expired
+            return Date.now() - heldAt <= HELD_TTL_MS;
           }
           return false;
         });
 
         if (conflictHeld) {
-          // Mark payment as failed due to slot conflict to avoid creating duplicate booking
           payments[index].status = "FAILED";
           payments[index].failureReason = "Slot already booked or reserved";
           payments[index].updatedAt = new Date().toISOString();
@@ -337,8 +381,11 @@ router.post("/verify-payment", async (req, res) => {
             url.searchParams.set("error", "slot_already_booked");
             return res.redirect(303, url.toString());
           }
-
-          return res.status(409).json({ ok: false, error: "Slot already booked or reserved", existing: conflictHeld });
+          return res.status(409).json({
+            ok: false,
+            error: "Slot already booked or reserved",
+            existing: conflictHeld,
+          });
         }
       }
     } catch (err) {
@@ -346,14 +393,13 @@ router.post("/verify-payment", async (req, res) => {
       // fall through to create booking normally
     }
 
+    // ── No held reservation found — create fresh booking (email sent inside) ──
     const booking = await createBookingFromPayment(payments[index], payments[index].id, paymentId);
 
     if (returnUrl) {
       const url = new URL(returnUrl);
-      // Use the internal payment record id so the frontend can look it up.
       url.searchParams.set("payment_status", "success");
       url.searchParams.set("payment_id", payments[index].id || "");
-      // Also include gateway-specific ids for debugging if needed
       url.searchParams.set("gateway_payment_id", paymentId);
       url.searchParams.set("order_id", orderId);
       return res.redirect(303, url.toString());
@@ -361,7 +407,9 @@ router.post("/verify-payment", async (req, res) => {
 
     return res.json({ ok: true, verified: true, payment: payments[index], booking });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    return res
+      .status(500)
+      .json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -377,8 +425,7 @@ router.get("/payments/:id", async (req, res) => {
   }
 });
 
-// Webhook endpoint for payment events.
-// For now we accept a minimal payload: { paymentId, status, reference }
+// Webhook endpoint for payment events
 router.post("/payments/webhook", async (req, res) => {
   try {
     const body = req.body || {};
@@ -400,13 +447,17 @@ router.post("/payments/webhook", async (req, res) => {
       return res.status(423).json({ ok: false, error: "Guide is not available today." });
     }
 
-    payments[index].status = status === "PAID" || status === "SUCCESS" ? "PAID" : status === "FAILED" ? "FAILED" : status;
+    payments[index].status =
+      status === "PAID" || status === "SUCCESS"
+        ? "PAID"
+        : status === "FAILED"
+          ? "FAILED"
+          : status;
     payments[index].reference = reference;
     payments[index].updatedAt = new Date().toISOString();
 
     await writePayments(payments);
 
-    // If paid, create booking server-side from payload (idempotent: check bookings for existing raw.paymentReference)
     if (payments[index].status === "PAID") {
       const payload = payments[index].payload || {};
       const slotDate = String(payload.slotTiming?.date || payload.date || "").trim();
@@ -414,22 +465,34 @@ router.post("/payments/webhook", async (req, res) => {
 
       const bookings = await readBookings();
 
-      // avoid duplicate booking creation for same paymentReference
-      const existingByRef = bookings.find((b: any) => b.paymentReference && b.paymentReference === (reference || payments[index].id));
+      // Idempotency: skip if booking already exists for this reference
+      const existingByRef = bookings.find(
+        (b: any) =>
+          b.paymentReference &&
+          b.paymentReference === (reference || payments[index].id),
+      );
       if (existingByRef) {
         return res.json({ ok: true });
       }
 
-      // Check for slot conflict: same date and same start time
+      // Slot conflict check
       if (slotDate && slotStart) {
         const conflict = bookings.find((b: any) => {
-          const bDate = b.slotDate || (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) || (b.raw && b.raw.date) || "";
-          const bStart = b.startTime || (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
-          return String(bDate) === slotDate && String(bStart) === slotStart && b.status !== "CANCELLED";
+          const bDate =
+            b.slotDate ||
+            (b.raw && b.raw.slotTiming && b.raw.slotTiming.date) ||
+            (b.raw && b.raw.date) || "";
+          const bStart =
+            b.startTime ||
+            (b.raw && b.raw.slotTiming && b.raw.slotTiming.startTime) || "";
+          return (
+            String(bDate) === slotDate &&
+            String(bStart) === slotStart &&
+            b.status !== "CANCELLED"
+          );
         });
 
         if (conflict) {
-          // Don't create duplicate booking; mark payment as FAILED for operator visibility
           payments[index].status = "FAILED";
           payments[index].failureReason = "Slot already booked (webhook)";
           payments[index].updatedAt = new Date().toISOString();
@@ -438,7 +501,7 @@ router.post("/payments/webhook", async (req, res) => {
         }
       }
 
-      const booking = {
+      const booking: any = {
         id: payload.id || `booking_${Date.now()}`,
         clientName: payload.name || payload.clientName || "",
         clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
@@ -454,19 +517,20 @@ router.post("/payments/webhook", async (req, res) => {
         paymentReference: reference || payments[index].id,
         status: "BOOKED",
         bookingTime: new Date().toISOString(),
+        payload,
         raw: payload,
       };
 
-      // avoid duplicate booking by reference again
-      const already = bookings.find((b: any) => b.paymentReference && b.paymentReference === booking.paymentReference);
+      // Final idempotency check before push
+      const already = bookings.find(
+        (b: any) =>
+          b.paymentReference && b.paymentReference === booking.paymentReference,
+      );
       if (!already) {
         bookings.push(booking);
         await writeBookings(bookings);
         await recordConfirmedBooking(booking);
-        const confirmation = await sendBookingEmailConfirmation(booking);
-        if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
-          console.warn("Booking confirmation email failed", { bookingId: booking.id, reason: confirmation.reason, error: confirmation.error });
-        }
+        await sendEmailOnce(booking);
       }
     }
 
@@ -479,13 +543,24 @@ router.post("/payments/webhook", async (req, res) => {
 export default router;
 
 // Admin helper: import local JSON data into Mongo (idempotent)
-// POST /api/admin/import-local-data
 router.post("/admin/import-local-data", async (req, res) => {
   try {
     const fs = await import("fs/promises");
     const path = await import("path");
-    const paymentsPath = path.resolve(process.cwd(), "artifacts", "api-server", "data", "payments.json");
-    const bookingsPath = path.resolve(process.cwd(), "artifacts", "api-server", "data", "bookings.json");
+    const paymentsPath = path.resolve(
+      process.cwd(),
+      "artifacts",
+      "api-server",
+      "data",
+      "payments.json",
+    );
+    const bookingsPath = path.resolve(
+      process.cwd(),
+      "artifacts",
+      "api-server",
+      "data",
+      "bookings.json",
+    );
 
     let importedPayments: any[] = [];
     let importedBookings: any[] = [];
@@ -507,8 +582,21 @@ router.post("/admin/import-local-data", async (req, res) => {
     const existingPayments = await readPayments();
     const existingBookings = await readBookings();
 
-    const paymentsToInsert = importedPayments.filter((p: any) => !existingPayments.find((e: any) => String(e.id) === String(p.id) || String(e.orderId) === String(p.orderId)));
-    const bookingsToInsert = importedBookings.filter((b: any) => !existingBookings.find((e: any) => String(e.id) === String(b.id) || String(e.paymentReference) === String(b.paymentReference)));
+    const paymentsToInsert = importedPayments.filter(
+      (p: any) =>
+        !existingPayments.find(
+          (e: any) =>
+            String(e.id) === String(p.id) || String(e.orderId) === String(p.orderId),
+        ),
+    );
+    const bookingsToInsert = importedBookings.filter(
+      (b: any) =>
+        !existingBookings.find(
+          (e: any) =>
+            String(e.id) === String(b.id) ||
+            String(e.paymentReference) === String(b.paymentReference),
+        ),
+    );
 
     const mergedPayments = existingPayments.concat(paymentsToInsert);
     const mergedBookings = existingBookings.concat(bookingsToInsert);
@@ -516,7 +604,10 @@ router.post("/admin/import-local-data", async (req, res) => {
     await writePayments(mergedPayments);
     await writeBookings(mergedBookings);
 
-    return res.json({ ok: true, imported: { payments: paymentsToInsert.length, bookings: bookingsToInsert.length } });
+    return res.json({
+      ok: true,
+      imported: { payments: paymentsToInsert.length, bookings: bookingsToInsert.length },
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
@@ -533,11 +624,12 @@ router.get("/admin/db-payments", async (req, res) => {
 });
 
 // Admin helper: reconcile PAID payments into bookings if missing
-// POST /api/payments/reconcile
 router.post("/payments/reconcile", async (req, res) => {
   try {
     const payments = await readPayments();
-    const paid = payments.filter((p: any) => String((p.status || p.paymentStatus || "")).toUpperCase() === "PAID");
+    const paid = payments.filter(
+      (p: any) => String((p.status || p.paymentStatus || "")).toUpperCase() === "PAID",
+    );
     const bookings = await readBookings();
 
     const created: any[] = [];
@@ -546,16 +638,23 @@ router.post("/payments/reconcile", async (req, res) => {
       const already = bookings.find((b: any) => {
         const ref = String(b.paymentReference || "");
         const gatewayId = String(b.gatewayPaymentId || b.razorpayPaymentId || "");
-        return ref === String(p.id) || gatewayId === String(p.razorpayPaymentId || p.gatewayPaymentId || p.gatewayResponse?.id || "");
+        return (
+          ref === String(p.id) ||
+          gatewayId ===
+            String(p.razorpayPaymentId || p.gatewayPaymentId || p.gatewayResponse?.id || "")
+        );
       });
 
       if (already) continue;
 
       try {
-        const booking = await createBookingFromPayment(p, String(p.id), String(p.razorpayPaymentId || p.gatewayPaymentId || ""));
+        const booking = await createBookingFromPayment(
+          p,
+          String(p.id),
+          String(p.razorpayPaymentId || p.gatewayPaymentId || ""),
+        );
         if (booking) created.push(booking);
       } catch (err) {
-        // continue on error per-payment
         console.error("Reconcile: failed to create booking from payment", p.id, err);
       }
     }

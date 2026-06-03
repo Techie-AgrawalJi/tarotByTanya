@@ -37,7 +37,7 @@ type FormData = z.infer<typeof formSchema>;
 
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
-    { time: "Chat Session - 15 Minutes", price: "₹349" },
+    { time: "Chat Session - 15 Minutes", price: "₹1" },
     { time: "Chat Session - 20 Minutes", price: "₹499" },
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
@@ -551,6 +551,7 @@ export function Booking() {
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   placeholder="jane@example.com"
                 />
+                <p className="text-sm text-foreground/60 mt-1">This email will be used to send your confirmation. Please use your own email address.</p>
                 {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
               </div>
 

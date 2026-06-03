@@ -14,6 +14,11 @@ type BookingDetail = {
   value: string;
 };
 
+type EmailConfirmationOptions = {
+  isGuideEmail?: boolean;
+  recipientEmail?: string;
+};
+
 function trimValue(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -112,6 +117,10 @@ function getRecipientEmail(booking: BookingLike): string {
   ).toLowerCase();
 }
 
+function getGuideRecipientEmail(_booking: BookingLike): string {
+  return trimValue(process.env.GUIDE_EMAIL || "").toLowerCase();
+}
+
 function getSenderDetails() {
   const senderEmail = trimValue(process.env.BREVO_SENDER_EMAIL || process.env.BREVO_FROM_EMAIL);
   const senderName = trimValue(process.env.BREVO_SENDER_NAME || process.env.BREVO_FROM_NAME || "Tarot By Tanya");
@@ -131,27 +140,62 @@ function buildBookingDetails(booking: BookingLike): BookingDetail[] {
   const timeRange = formatTimeRange(firstNonEmpty(slotTiming.startTime, booking.startTime, raw.startTime), firstNonEmpty(slotTiming.endTime, booking.endTime, raw.endTime));
   const paymentAmount = formatAmount(firstNonEmpty(booking.paymentAmount, raw.paymentAmount, raw.amount));
 
+  // Derive a human-friendly slot block label when available
+  function slotBlockLabel(blockKey: unknown): string {
+    const key = String(blockKey || "").toLowerCase().trim();
+    if (!key) return "";
+    if (key === "morning") return "Morning (9:00 AM - 12:00 PM)";
+    if (key === "noon") return "Noon (2:00 PM - 5:00 PM)";
+    if (key === "evening") return "Evening (7:00 PM - 11:00 PM)";
+    return titleCase(key.replace(/[-_]/g, " "));
+  }
+
+  const clientPhone = firstNonEmpty(booking.phone, booking.clientPhone, raw.phone, raw.clientPhone);
+  const clientDob = firstNonEmpty(booking.dob, raw.dob, booking.raw?.dob);
+  const birthPlace = firstNonEmpty(booking.birthLocation, raw.birthLocation, raw.placeOfBirth, raw.cityOfBirth);
+  const gender = firstNonEmpty(booking.gender, raw.gender);
+  const maritalStatus = firstNonEmpty(booking.maritalStatus, raw.maritalStatus);
+  const occupation = firstNonEmpty(booking.occupation, raw.occupation);
+  const message = firstNonEmpty(booking.message, raw.message, booking.payload?.message);
+  const packageLabel = firstNonEmpty(booking.durationLabel, booking.duration, raw.durationLabel, raw.duration);
+  const slotBlock = slotBlockLabel(firstNonEmpty(slotTiming.timeBlock, booking.slotTiming?.timeBlock, raw.slotTiming?.timeBlock, raw.timeBlock));
+  const slotStart = firstNonEmpty(slotTiming.startTime, booking.startTime, raw.startTime, booking.slotTiming?.startTime);
+  const slotEnd = firstNonEmpty(slotTiming.endTime, booking.endTime, raw.endTime, booking.slotTiming?.endTime);
+
   return [
     { label: "Client name", value: firstNonEmpty(booking.clientName, raw.name, raw.clientName) },
-    { label: "Client email", value: getRecipientEmail(booking) },
+    { label: "WhatsApp / Phone", value: clientPhone },
+    { label: "Date of birth", value: clientDob },
+    { label: "Birth place", value: birthPlace },
+    { label: "Gender", value: gender },
+    { label: "Marital status", value: maritalStatus },
+    { label: "Occupation", value: occupation },
+    { label: "Message / Focus", value: message },
     { label: "Session type", value: sessionType },
+    { label: "Package", value: packageLabel },
     { label: "Date", value: appointmentDate },
     { label: "Time", value: timeRange },
+    { label: "Slot", value: slotBlock || slotStart ? `${slotBlock}${slotBlock && slotStart ? " · " : ""}${slotStart || ""}${slotEnd ? ` - ${slotEnd}` : ""}` : "" },
     { label: "Duration", value: firstNonEmpty(booking.durationLabel, booking.durationMinutes ? `${booking.durationMinutes} minutes` : raw.duration, raw.durationMinutes ? `${raw.durationMinutes} minutes` : "") },
-    { label: "Payment status", value: paymentStatus },
     { label: "Payment amount", value: paymentAmount },
-    { label: "Payment method", value: firstNonEmpty(booking.paymentMethod, raw.paymentMethod, "Online payment") },
-    { label: "Payment reference", value: firstNonEmpty(booking.paymentReference, booking.id, raw.paymentReference, raw.paymentId, raw.orderId) },
   ].filter((item) => Boolean(item.value));
 }
 
-function buildHtmlBody(booking: BookingLike): string {
+function buildHtmlBody(booking: BookingLike, options: EmailConfirmationOptions = {}): string {
   const raw = booking.raw || {};
+  const isGuideEmail = Boolean(options.isGuideEmail);
   const guideContact = firstNonEmpty(
     booking.guidePhone,
     booking.raw?.guidePhone,
     booking.raw?.guide?.phone,
     process.env.GUIDE_WHATSAPP_NUMBER,
+  );
+  const clientContact = firstNonEmpty(
+    booking.clientPhone,
+    booking.phone,
+    booking.raw?.phone,
+    booking.raw?.clientPhone,
+    booking.raw?.whatsapp,
   );
   const guideName = firstNonEmpty(booking.raw?.guide?.name, process.env.GUIDE_CONTACT_NAME || "Your guide");
   const senderName = trimValue(process.env.BREVO_SENDER_NAME || process.env.BREVO_FROM_NAME || "Tarot By Tanya");
@@ -172,68 +216,99 @@ function buildHtmlBody(booking: BookingLike): string {
     )
     .join("");
 
+  const emailTitle = isGuideEmail ? "New booking received" : "Your booking is confirmed";
+  const emailSubtitle = isGuideEmail
+    ? `A new booking has been confirmed. Connect with the client using the contact information below.`
+    : `Thank you, ${clientName}. Your session has been secured. Please find your booking details below.`;
+  const footerMessage = isGuideEmail
+    ? "Please contact the client using the number above to confirm their session."
+    : "We will use this email for any updates or follow-ups related to your reading.";
+  const contactPhone = isGuideEmail ? clientContact : guideContact;
+  const contactHeading = isGuideEmail ? "📲 Contact the client" : `📲 Connect with ${guideName}`;
+  const contactDescription = isGuideEmail
+    ? "Reach out to the client on WhatsApp so you can confirm their booking and start the session."
+    : "Send a screenshot of this confirmation to the guide so they can match your booking and start the session.";
+
   return `
+    <style>
+      @media (max-width: 600px) {
+        .details-box-container {
+          padding: 0 16px 24px 16px !important;
+        }
+        .contact-box-container {
+          padding: 0 16px 24px 16px !important;
+        }
+        .header-container {
+          padding: 24px 16px 20px 16px !important;
+        }
+      }
+    </style>
     <div style="margin:0;padding:0;background:#f3efe7;">
-      <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your tarot session is confirmed for ${appointmentDate || timeRange}.</div>
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${isGuideEmail ? `A new booking has been confirmed.` : `Your tarot session is confirmed for ${appointmentDate || timeRange}.`}</div>
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe7;padding:32px 16px;">
         <tr>
           <td align="center">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#0f1020;border:1px solid rgba(212,180,106,0.18);border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(15,16,32,0.18);font-family:Arial,Helvetica,sans-serif;">
               <tr>
                 <td style="padding:0;background:linear-gradient(135deg,#0f1020 0%,#1f1a31 55%,#3b2f17 100%);">
-                  <div style="padding:32px 34px 28px 34px;">
+                  <div class="header-container" style="padding:32px 34px 28px 34px;">
                     <div style="font-size:12px;letter-spacing:0.24em;text-transform:uppercase;color:#d4b46a;font-weight:700;">${senderName}</div>
-                    <h1 style="margin:14px 0 10px 0;color:#ffffff;font-size:30px;line-height:1.2;font-weight:700;">Your booking is confirmed</h1>
-                    <p style="margin:0;color:#d7dbea;font-size:15px;line-height:1.7;max-width:560px;">Thank you, ${clientName}. Your session has been secured and payment has been received. Please find your booking summary below.</p>
+                    <h1 style="margin:14px 0 10px 0;color:#ffffff;font-size:30px;line-height:1.2;font-weight:700;">${emailTitle}</h1>
+                    <p style="margin:0;color:#d7dbea;font-size:15px;line-height:1.7;max-width:560px;">${emailSubtitle}</p>
                   </div>
                 </td>
               </tr>
               <tr>
-                <td style="padding:0 34px 32px 34px;">
+                <td class="details-box-container" style="padding:0 34px 24px 34px;">
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:-12px;background:#151730;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:24px;">
                     <tr>
-                      <td style="padding-bottom:20px;">
-                        <div style="color:#d4b46a;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;">Booking summary</div>
-                        <div style="margin-top:8px;color:#ffffff;font-size:22px;font-weight:700;">${sessionType}</div>
-                        <div style="margin-top:6px;color:#aeb5ca;font-size:14px;line-height:1.6;">${appointmentDate || ""}${appointmentDate && timeRange ? " · " : ""}${timeRange || ""}</div>
+                      <td style="padding-bottom:8px;">
+                        <div style="color:#d4b46a;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;">Booking details</div>
+                        <div style="margin-top:6px;color:#ffffff;font-size:20px;font-weight:700;">${sessionType}${appointmentDate ? ` · ${appointmentDate}` : ""}</div>
+                        <div style="margin-top:6px;color:#aeb5ca;font-size:13px;line-height:1.5;">${appointmentDate && timeRange ? `${timeRange}` : timeRange || ""}</div>
                       </td>
                     </tr>
                     <tr>
-                      <td>
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">${rows}</table>
+                      <td style="padding-top:8px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;">
+                          ${rows}
+                        </table>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding-top:22px;">
-                        <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:18px;color:#c8cfdf;font-size:14px;line-height:1.7;">
-                          Payment of ${paymentAmount || "your selected package"} is confirmed. We will use this email for any updates or follow-ups related to your reading.
-                        </div>
+                      <td style="padding-top:18px;color:#c8cfdf;font-size:14px;line-height:1.6;">
+                        ${footerMessage}
                       </td>
                     </tr>
-                    ${guideContact ? `
-                      <tr>
-                        <td style="padding-top:16px;">
-                          <div style="margin-top:12px;padding:18px;border-radius:14px;background:#171427;color:#e8eaf6;font-size:14px;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,0.35);">
-                            <div style="font-weight:800;color:#ffd88a;margin-bottom:8px;font-size:16px;">📲 Connect with ${guideName}</div>
-                            <div style="margin-bottom:10px;color:#cdd6e6;font-size:14px;">To connect with your guide via WhatsApp, please message or call:</div>
-                            <a href="https://wa.me/${String(guideContact).replace(/[^0-9]/g,"")}" style="display:inline-block;padding:10px 14px;background:#d4b46a;color:#0f1020;border-radius:8px;font-weight:700;text-decoration:none;font-size:15px;">${guideContact}</a>
-                            <div style="margin-top:12px;color:#c8cfdf;font-size:13px;">Please take a screenshot of this email and send it to the number above via WhatsApp so the guide can match your booking.</div>
-                          </div>
-                        </td>
-                      </tr>
-                    ` : ""}
                   </table>
                 </td>
               </tr>
-              
+              ${contactPhone ? `
+              <tr>
+                <td class="contact-box-container" style="padding:0 34px 32px 34px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f1020;border:1px solid rgba(212,180,106,0.12);border-radius:12px;padding:18px 20px;box-sizing:border-box;">
+                    <tr>
+                      <td style="text-align:center;">
+                        <div style="font-weight:800;color:#ffd88a;margin-bottom:6px;font-size:15px;">${contactHeading}</div>
+                        <div style="margin-bottom:12px;color:#cdd6e6;font-size:14px;line-height:1.5;">${contactDescription}</div>
+                        <div style="margin-top:12px;text-align:center;">
+                          <a href="https://wa.me/${String(contactPhone).replace(/[^0-9]/g,"")}" style="display:inline-block;padding:8px 14px;background:#d4b46a;color:#0f1020;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;margin:0 auto;">${contactPhone}</a>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              ` : ""}
             </table>
           </td>
         </tr>
       </table>
-    </div>`;
+      </div>`;
 }
 
-function buildTextBody(booking: BookingLike): string {
+function buildTextBody(booking: BookingLike, options: EmailConfirmationOptions = {}): string {
+  const isGuideEmail = Boolean(options.isGuideEmail);
   const details = buildBookingDetails(booking);
   const guideContact = firstNonEmpty(
     booking.guidePhone,
@@ -241,18 +316,29 @@ function buildTextBody(booking: BookingLike): string {
     booking.raw?.guide?.phone,
     process.env.GUIDE_WHATSAPP_NUMBER,
   );
+  const clientContact = firstNonEmpty(
+    booking.clientPhone,
+    booking.phone,
+    booking.raw?.phone,
+    booking.raw?.clientPhone,
+    booking.raw?.whatsapp,
+  );
   const guideName = firstNonEmpty(booking.raw?.guide?.name, process.env.GUIDE_CONTACT_NAME || "Your guide");
 
   const lines = [
     "Tarot By Tanya",
-    "Your booking is confirmed.",
+    isGuideEmail ? "New booking received." : "Your booking is confirmed.",
     "",
     ...details.map((detail) => `${detail.label}: ${detail.value}`),
     "",
-    "Payment has been confirmed and your session is secured.",
   ];
 
-  if (guideContact) {
+  if (isGuideEmail && clientContact) {
+    lines.push(`Client contact: ${clientContact}`);
+    lines.push("Please contact the client on WhatsApp to confirm the session details.");
+  }
+
+  if (!isGuideEmail && guideContact) {
     lines.push("");
     lines.push(`Connect with ${guideName}: ${guideContact}`);
     lines.push("Please take a screenshot of this email and send it to the number above via WhatsApp so the guide can match your booking.");
@@ -272,8 +358,11 @@ function extractErrorMessage(payload: any): string {
   );
 }
 
-export async function sendBookingEmailConfirmation(booking: BookingLike): Promise<EmailConfirmationResult> {
-  const recipientEmail = getRecipientEmail(booking);
+export async function sendBookingEmailConfirmation(
+  booking: BookingLike,
+  options: EmailConfirmationOptions = {},
+): Promise<EmailConfirmationResult> {
+  const recipientEmail = options.recipientEmail || (options.isGuideEmail ? getGuideRecipientEmail(booking) : getRecipientEmail(booking));
 
   if (!recipientEmail) {
     return { sent: false, reason: "missing_email" };
@@ -286,9 +375,12 @@ export async function sendBookingEmailConfirmation(booking: BookingLike): Promis
     return { sent: false, reason: "not_configured" };
   }
 
-  const subject = `Your Tarot By Tanya booking is confirmed`;
-  const htmlContent = buildHtmlBody(booking);
-  const textContent = buildTextBody(booking);
+  const clientName = firstNonEmpty(booking.clientName, booking.raw?.name, booking.raw?.clientName, "Client");
+  const subject = options.isGuideEmail
+    ? `New Tarot By Tanya booking received from ${clientName}`
+    : `Your Tarot By Tanya booking is confirmed`;
+  const htmlContent = buildHtmlBody(booking, options);
+  const textContent = buildTextBody(booking, options);
 
   try {
     const response = await fetch(apiUrl, {
