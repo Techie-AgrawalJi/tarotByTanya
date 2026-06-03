@@ -4,7 +4,7 @@ import { readPayments, writePayments, findPaymentById } from "../lib/paymentsSto
 import { readBookings, writeBookings } from "../lib/bookingsStore";
 import { isGuideAvailable } from "../lib/guideAvailabilityStore";
 import { recordConfirmedBooking } from "../lib/bookingMetricsStore";
-import { sendBookingWhatsAppConfirmation } from "../lib/whatsapp";
+import { sendBookingEmailConfirmation } from "../lib/emailConfirmation";
 import { calculateSlotAvailability, isValidTimeBlock } from "../lib/bookingSlots";
 
 const router = Router();
@@ -86,6 +86,7 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
     id: payload.id || `booking_${Date.now()}`,
     clientName: payload.name || payload.clientName || "",
     clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+    clientEmail: payload.email || payload.clientEmail || "",
     slotDate: slotDate,
     startTime: payload.slotTiming?.startTime || payload.startTime || "",
     endTime: payload.slotTiming?.endTime || payload.endTime || "",
@@ -105,7 +106,10 @@ async function createBookingFromPayment(paymentRecord: any, paymentRecordId: str
   bookings.push(booking);
   await writeBookings(bookings);
   await recordConfirmedBooking(booking);
-  await sendBookingWhatsAppConfirmation(booking);
+  const confirmation = await sendBookingEmailConfirmation(booking);
+  if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
+    console.warn("Booking confirmation email failed", { bookingId: booking.id, reason: confirmation.reason, error: confirmation.error });
+  }
 
   return booking;
 }
@@ -286,7 +290,10 @@ router.post("/verify-payment", async (req, res) => {
         heldByThis.bookingTime = heldByThis.bookingTime || new Date().toISOString();
         await writeBookings(bookings);
         await recordConfirmedBooking(heldByThis);
-        await sendBookingWhatsAppConfirmation(heldByThis);
+        const heldConfirmation = await sendBookingEmailConfirmation(heldByThis);
+        if (!heldConfirmation.sent && heldConfirmation.reason && heldConfirmation.reason !== "missing_email") {
+          console.warn("Booking confirmation email failed", { bookingId: heldByThis.id, reason: heldConfirmation.reason, error: heldConfirmation.error });
+        }
         const booking = heldByThis;
         if (returnUrl) {
           const url = new URL(returnUrl);
@@ -435,6 +442,7 @@ router.post("/payments/webhook", async (req, res) => {
         id: payload.id || `booking_${Date.now()}`,
         clientName: payload.name || payload.clientName || "",
         clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+        clientEmail: payload.email || payload.clientEmail || "",
         startTime: payload.slotTiming?.startTime || payload.startTime || "",
         endTime: payload.slotTiming?.endTime || payload.endTime || "",
         bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
@@ -455,7 +463,10 @@ router.post("/payments/webhook", async (req, res) => {
         bookings.push(booking);
         await writeBookings(bookings);
         await recordConfirmedBooking(booking);
-        await sendBookingWhatsAppConfirmation(booking);
+        const confirmation = await sendBookingEmailConfirmation(booking);
+        if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
+          console.warn("Booking confirmation email failed", { bookingId: booking.id, reason: confirmation.reason, error: confirmation.error });
+        }
       }
     }
 

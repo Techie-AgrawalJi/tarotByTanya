@@ -13,6 +13,7 @@ import {
 } from "@/lib/bookingsStore";
 import { type BookedSession } from "@/lib/slotManager";
 import Candles from "../components/Candles";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 const ADMIN_EMAIL = (import.meta as any).env.VITE_ADMIN_EMAIL || "admin@example.com";
 const ADMIN_PASSWORD = (import.meta as any).env.VITE_ADMIN_PASSWORD || "password123";
@@ -305,7 +306,7 @@ export default function Admin() {
                   <th className="px-3 py-2">Start</th>
                   <th className="px-3 py-2">End</th>
                   <th className="px-3 py-2">Buffer End</th>
-                  <th className="px-3 py-2">Duration</th>
+                  <th className="px-3 py-2">Duration (min)</th>
                   <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
@@ -317,13 +318,13 @@ export default function Admin() {
                   >
                     <td className="px-3 py-2 text-white">{(booking as any).fullName || (booking as any).clientName || (booking as any).raw?.name || (booking as any).raw?.clientName || (booking as any).name || "-"}</td>
                     <td className="px-3 py-2 text-white/70">{(booking as any).clientPhone || (booking as any).raw?.phone || (booking as any).raw?.clientPhone || (booking as any).whatsapp || "-"}</td>
-                    <td className="px-3 py-2 text-white/70">{booking.bookingTime ? new Date(booking.bookingTime).toLocaleString() : "-"}</td>
-                    <td className="px-3 py-2 text-white/70">{booking.slotDate || (booking as any).raw?.slotTiming?.date || (booking as any).raw?.date || "-"}</td>
+                    <td className="px-3 py-2 text-white/70">{booking.bookingTime ? formatDateTime(booking.bookingTime) : "-"}</td>
+                    <td className="px-3 py-2 text-white/70">{formatDate(booking.slotDate || (booking as any).raw?.slotTiming?.date || (booking as any).raw?.date)}</td>
                     <td className="px-3 py-2 text-white/70">{booking.sessionType}</td>
                     <td className="px-3 py-2 text-white/70">{booking.startTime}</td>
                     <td className="px-3 py-2 text-white/70">{booking.endTime}</td>
                     <td className="px-3 py-2 text-white/70">{booking.bufferEndTime}</td>
-                    <td className="px-3 py-2 text-white/70">{booking.durationMinutes}m</td>
+                    <td className="px-3 py-2 text-white/70">{booking.durationMinutes ?? "-"}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-2 lg:flex-nowrap">
                         {booking.status !== "COMPLETED" ? (
@@ -373,7 +374,7 @@ export default function Admin() {
                             <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200">Completed</span>
                             {booking.cutThrough ? (
                               <span className="rounded bg-yellow-600/15 px-2 py-1 text-yellow-200 text-xs">
-                                Cut Through{booking.actualEndTime ? ` • ${new Date(booking.actualEndTime).toLocaleString()}` : ""}
+                                Cut Through{booking.actualEndTime ? ` • ${formatDateTime(booking.actualEndTime)}` : ""}
                               </span>
                             ) : null}
                           </div>

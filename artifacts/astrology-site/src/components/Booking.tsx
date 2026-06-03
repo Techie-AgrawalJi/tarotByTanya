@@ -20,7 +20,8 @@ import {
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  phone: z.string().min(10, "Valid WhatsApp number required"),
+  email: z.string().email("Please enter a valid email address"),
+  phone: z.string().min(10, "Valid phone number required"),
   dob: z.string().min(1, "Please enter your date of birth"),
   birthLocation: z.string().min(3, "Please enter your city, state, and country of birth"),
   gender: z.string().min(1, "Please select your gender"),
@@ -41,12 +42,12 @@ const servicePackages: Record<string, { time: string; price: string }[]> = {
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
     { time: "Video Call - 30 Minutes", price: "₹999" }, 
-    { time: "Video Call - 1 Hour", price: "₹1,899" },
+    { time: "Video Call - 60 minutes", price: "₹1,899" },
     { time: "Call - 15 Minutes", price: "₹399" },
     { time: "Call - 20 Minutes", price: "₹549" },
     { time: "Call - 30 Minutes", price: "₹799" },
     { time: "Call - 45 Minutes", price: "₹1,199" },
-    { time: "Call - 1 Hour", price: "₹1,499" },
+    { time: "Call - 60 minutes", price: "₹1,499" },
   ],
   "spell casting & healer": [
     { time: "Consultation", price: "₹699" },
@@ -134,6 +135,7 @@ export function Booking() {
 
     const payload = draft.payload;
     if (typeof payload.name === "string") setValue("name", payload.name);
+    if (typeof payload.email === "string") setValue("email", payload.email);
     if (typeof payload.phone === "string") setValue("phone", payload.phone);
     if (typeof payload.dob === "string") setValue("dob", payload.dob);
     if (typeof payload.birthLocation === "string") {
@@ -540,10 +542,23 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Email Address</label>
+                <input 
+                  {...register("email")}
+                  type="email"
+                  autoComplete="email"
+                  data-testid="input-email"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="jane@example.com"
+                />
+                {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">WhatsApp Number</label>
                 <input 
                   {...register("phone")}
-                  type="tel"
+                  type="tel"                                                                                                
                   inputMode="tel"
                   data-testid="input-phone"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
@@ -1044,7 +1059,7 @@ export function Booking() {
               
               <h3 className="text-3xl font-serif font-bold text-white mb-4">Journey Initiated</h3>
               <p className="text-foreground/90 font-light leading-relaxed mb-8">
-                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A confirmation will be sent to your WhatsApp number shortly.
+                Thank you, <span className="text-primary font-bold">{submittedName}</span>! Your booking request has been received. A confirmation email will be sent shortly.
               </p>
               
               <button 

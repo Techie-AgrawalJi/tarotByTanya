@@ -3,6 +3,8 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const app: Express = express();
 
@@ -25,9 +27,45 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Security middleware
+// Use Helmet to set secure HTTP headers
+// Helmet with sensible defaults; add CSP that allows scripts/styles from self and trusted CDNs if needed.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https:"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+      },
+    },
+  })
+);
+
+// Global rate limiter (tunable)
+const limiter = rateLimit({ windowMs: 60_000, max: 120 });
+app.use(limiter);
+
+// CORS allowlist: set comma-separated origins in CORS_ORIGINS
+const rawOrigins = process.env.CORS_ORIGINS || "";
+const allowedOrigins = rawOrigins.split(",").map((s) => s.trim()).filter(Boolean);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // allow non-browser requests like curl
+      if (allowedOrigins.length === 0) return cb(null, false);
+      cb(null, allowedOrigins.includes(origin));
+    },
+  })
+);
+
+// Limit JSON body size to reduce DoS risk (adjust to app needs)
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 app.use("/api", router);
 

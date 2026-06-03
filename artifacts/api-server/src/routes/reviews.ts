@@ -3,6 +3,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { v2 as cloudinary } from "cloudinary";
+import { fileTypeFromBuffer } from "file-type";
 import { getReviewsCollection, type ReviewDocument } from "../lib/mongo";
 import { logger } from "../lib/logger";
 
@@ -131,10 +132,17 @@ router.post("/reviews", upload.array("photos", 4), async (req, res) => {
 
     const files = Array.isArray(req.files) ? req.files : [];
 
-    // Upload images to Cloudinary
+    // Validate and upload images to Cloudinary
     const uploadedImages = await Promise.all(
       files.map(async (file) => {
         try {
+          // Validate file by magic bytes to ensure it's an image
+          const ft = await fileTypeFromBuffer(file.buffer);
+          if (!ft || !ft.mime.startsWith("image/")) {
+            logger.warn({ filename: file.originalname, detected: ft?.mime }, "Rejected upload: not an image based on content");
+            throw new Error(`Invalid image file: ${file.originalname}`);
+          }
+
           const result = await new Promise<any>((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
               {

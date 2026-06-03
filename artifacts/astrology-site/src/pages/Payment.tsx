@@ -171,7 +171,9 @@ export default function Payment() {
         throw new Error(createOrderJson?.error || "Unable to create Razorpay order.");
       }
 
-      const keyId = getRazorpayKeyId();
+      // Prefer the key id returned by the server (order was created with it).
+      // Fall back to local VITE key if server didn't return one.
+      const keyId = String(createOrderJson.key_id || getRazorpayKeyId()).trim();
       if (!keyId) {
         throw new Error("Razorpay key id is not configured.");
       }
@@ -231,7 +233,7 @@ export default function Payment() {
             
             completed = true;
             setPaymentState("success");
-            setMessage("Payment verified and booking confirmed.");
+            setMessage("Payment verified and booking confirmed. A confirmation email has been sent — please check your inbox or spam for booking details.");
             clearBookingDraft();
           } catch (err) {
             const conflictMessage = err instanceof Error ? err.message : String(err || "");
@@ -241,7 +243,7 @@ export default function Payment() {
               if (confirmed) {
                 completed = true;
                 setPaymentState("success");
-                setMessage("Payment verified and booking confirmed.");
+                setMessage("Payment verified and booking confirmed. A confirmation email has been sent — please check your inbox or spam for booking details.");
                 clearBookingDraft();
                 return;
               }

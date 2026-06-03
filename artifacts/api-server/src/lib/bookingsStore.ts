@@ -6,6 +6,7 @@ function normalizeBookingRecord(booking: BookingRecord): BookingRecord {
   const slotDate = String(booking.slotDate || booking.raw?.slotTiming?.date || booking.raw?.date || "").trim();
   const clientName = String(booking.clientName || booking.raw?.name || booking.raw?.clientName || booking.name || booking.fullName || "").trim();
   const clientPhone = String(booking.clientPhone || booking.raw?.phone || booking.raw?.clientPhone || booking.raw?.whatsapp || booking.whatsapp || "").trim();
+  const clientEmail = String(booking.clientEmail || booking.raw?.email || booking.raw?.clientEmail || booking.email || "").trim();
 
   // Ensure a stable `id` field for client code (fall back to Mongo's _id)
   const id = String(booking.id || booking._id || booking._id?.toString() || "");
@@ -19,6 +20,7 @@ function normalizeBookingRecord(booking: BookingRecord): BookingRecord {
     slotDate,
     clientName,
     clientPhone,
+    clientEmail,
     bookingTime,
   };
 }

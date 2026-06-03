@@ -10,6 +10,7 @@ out-tsc
 
 # dependencies
 node_modules
+.env.example
 .env
 
 # IDEs and editors
@@ -45,3 +46,16 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
+# Artifacts and generated reports
+/artifacts/ui-reference-report.json
+/artifacts/ui-usage-report.json
+/artifacts/astrology-site/.hmr_touch
+/artifacts/astrology-site/node_modules/
+/artifacts/astrology-site/dist/
+/artifacts/astrology-site/.env
+/artifacts/astrology-site/components.json
+/artifacts/api-server/.env
+/artifacts/api-server/dist/
+/artifacts/api-server/node_modules/
+/artifacts/*.log
+/artifacts/**/*.tmp

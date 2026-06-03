@@ -4,7 +4,7 @@ import { readPayments } from "../lib/paymentsStore";
 import { findPaymentById } from "../lib/paymentsStore";
 import { isGuideAvailable } from "../lib/guideAvailabilityStore";
 import { readBookingMetrics, recordConfirmedBooking, resetBookingMetrics } from "../lib/bookingMetricsStore";
-import { sendBookingWhatsAppConfirmation } from "../lib/whatsapp";
+import { sendBookingEmailConfirmation } from "../lib/emailConfirmation";
 import { getBookingCounterModel, getBookingConfirmationMarkerModel, getSeenClientPhoneModel } from "../lib/mongoose";
 import {
   BUFFER_MINUTES,
@@ -107,6 +107,26 @@ async function hydrateBookingsFromPaidPayments() {
         changed = true;
       }
     }
+
+    if (!b.clientEmail || String(b.clientEmail).trim() === "") {
+      let inferredEmail = (b.raw && (b.raw.email || b.raw.clientEmail)) || b.clientEmail || b.email || "";
+
+      if (!inferredEmail && b.paymentReference) {
+        try {
+          const payment = await findPaymentById(String(b.paymentReference));
+          if (payment) {
+            inferredEmail = payment.email || payment.customer?.email || payment.payload?.email || payment.payload?.clientEmail || payment.raw?.email || "";
+          }
+        } catch (e) {
+          // ignore payment lookup failures
+        }
+      }
+
+      if (inferredEmail) {
+        b.clientEmail = inferredEmail;
+        changed = true;
+      }
+    }
     // Ensure bookingTime is set so admin can show when it was created
     if (!b.bookingTime || String(b.bookingTime).trim() === "") {
       const inferredBookingTime = b.heldAt || b.raw?.bookingTime || b.raw?.createdAt || b.raw?.created_at || "";
@@ -144,11 +164,14 @@ function getPaymentPhone(payment: any): string {
   return String(
     payment?.payload?.phone ||
       payment?.payload?.clientPhone ||
+      payment?.payload?.email ||
       payment?.payload?.whatsapp ||
       payment?.phone ||
       payment?.customer?.phone ||
+      payment?.customer?.email ||
       payment?.raw?.phone ||
       payment?.raw?.clientPhone ||
+      payment?.raw?.email ||
       payment?.raw?.whatsapp ||
       "",
   ).trim();
@@ -310,6 +333,7 @@ router.post("/bookings/create", async (req, res) => {
         slotDate,
         clientName: payload.name || payload.clientName || "",
         clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+        clientEmail: payload.email || payload.clientEmail || "",
         startTime: minutesToTime24(startMinutes),
         endTime: minutesToTime24(endMinutes),
         bufferEndTime: minutesToTime24(bufferEndMinutes),
@@ -351,6 +375,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
       slotDate: payload.slotTiming?.date || payload.date || "",
       clientName: payload.name || payload.clientName || "",
       clientPhone: payload.phone || payload.clientPhone || payload.whatsapp || "",
+      clientEmail: payload.email || payload.clientEmail || "",
       startTime: payload.slotTiming?.startTime || payload.startTime || "",
       endTime: payload.slotTiming?.endTime || payload.endTime || "",
       bufferEndTime: payload.slotTiming?.bufferEndTime || payload.bufferEndTime || "",
@@ -372,7 +397,10 @@ router.post("/bookings", async (req, res): Promise<void> => {
 
     const confirmedStatus = String(newBooking.status || "").trim().toUpperCase();
     if (confirmedStatus === "BOOKED" || confirmedStatus === "PAID" || confirmedStatus === "COMPLETED") {
-      await sendBookingWhatsAppConfirmation(newBooking);
+      const confirmation = await sendBookingEmailConfirmation(newBooking);
+      if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
+        console.warn("Booking confirmation email failed", { bookingId: newBooking.id, reason: confirmation.reason, error: confirmation.error });
+      }
     }
 
     return void res.json({ ok: true, booking: newBooking });
@@ -423,7 +451,10 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
 
     if (nextStatus === "BOOKED" && previousStatus !== "BOOKED") {
       await recordConfirmedBooking(bookings[index]);
-      await sendBookingWhatsAppConfirmation(bookings[index]);
+      const confirmation = await sendBookingEmailConfirmation(bookings[index]);
+      if (!confirmation.sent && confirmation.reason && confirmation.reason !== "missing_email") {
+        console.warn("Booking confirmation email failed", { bookingId: bookings[index].id, reason: confirmation.reason, error: confirmation.error });
+      }
     }
 
     return void res.json({ ok: true, booking: bookings[index] });
