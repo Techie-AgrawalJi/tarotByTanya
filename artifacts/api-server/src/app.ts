@@ -57,7 +57,21 @@ app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true); // allow non-browser requests like curl
-      if (allowedOrigins.length === 0) return cb(null, false);
+
+      // If no CORS_ORIGINS configured:
+      // - In development, allow all origins to make local testing easier.
+      // - In production, block and log a warning so operator can configure allowed origins.
+      if (allowedOrigins.length === 0) {
+        if (process.env.NODE_ENV === "production") {
+          // eslint-disable-next-line no-console
+          console.warn("CORS_ORIGINS not set in production — blocking browser requests. Set CORS_ORIGINS to your frontend origin(s).");
+          return cb(null, false);
+        }
+
+        // non-production default: allow all origins for convenience
+        return cb(null, true);
+      }
+
       cb(null, allowedOrigins.includes(origin));
     },
   })
