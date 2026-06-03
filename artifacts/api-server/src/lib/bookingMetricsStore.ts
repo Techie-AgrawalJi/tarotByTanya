@@ -64,6 +64,33 @@ function normalizeMetrics(record: any): BookingMetricsRecord {
   };
 }
 
+async function calculateBookingMetricsFromBookings(): Promise<BookingMetricsRecord> {
+  const bookings = await readBookings();
+  const confirmedBookings = bookings.filter(isConfirmedBooking);
+  const seenBookingKeys = new Set<string>();
+  const seenPhones = new Set<string>();
+
+  for (const booking of confirmedBookings) {
+    const bookingKey = getBookingKey(booking);
+    if (bookingKey) {
+      seenBookingKeys.add(bookingKey);
+    }
+    const phoneKey = normalizePhoneKey(getBookingPhone(booking));
+    if (phoneKey) {
+      seenPhones.add(phoneKey);
+    }
+  }
+
+  const now = new Date();
+  return {
+    id: BOOKING_COUNTER_ID,
+    bookingTotal: seenBookingKeys.size,
+    uniqueClientTotal: seenPhones.size,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 async function getMetricsDocument() {
   const Counter = await getBookingCounterModel();
   const now = new Date();
@@ -85,7 +112,26 @@ async function getMetricsDocument() {
 }
 
 export async function readBookingMetrics(): Promise<BookingMetricsRecord> {
-  return getMetricsDocument();
+  const metrics = await getMetricsDocument();
+
+  if (metrics.bookingTotal === 0 && metrics.uniqueClientTotal === 0) {
+    const computed = await calculateBookingMetricsFromBookings();
+    if (computed.bookingTotal !== 0 || computed.uniqueClientTotal !== 0) {
+      const Counter = await getBookingCounterModel();
+      await Counter.findOneAndUpdate(
+        { _id: BOOKING_COUNTER_ID },
+        {
+          bookingTotal: computed.bookingTotal,
+          uniqueClientTotal: computed.uniqueClientTotal,
+          updatedAt: new Date(),
+        },
+        { upsert: true },
+      ).exec();
+      return computed;
+    }
+  }
+
+  return metrics;
 }
 
 export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
@@ -117,10 +163,6 @@ export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
   const SeenPhone = await getSeenClientPhoneModel();
 
   const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
-  if (existing) {
-    return normalizeMetrics(existing);
-  }
-
   const bookings = await readBookings();
   const completedBookings = bookings.filter(isConfirmedBooking);
   const seenBookingKeys = new Set<string>();
@@ -178,15 +220,31 @@ export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
     );
   }
 
-  const seeded = await Counter.create({
+  const updated = existing
+    ? await Counter.findOneAndUpdate(
+        { _id: BOOKING_COUNTER_ID },
+        {
+          bookingTotal: confirmationMarkers.length,
+          uniqueClientTotal: phoneMarkers.length,
+          updatedAt: now,
+        },
+        { returnDocument: "after", upsert: true },
+      ).lean().exec()
+    : await Counter.create({
+        _id: BOOKING_COUNTER_ID,
+        bookingTotal: confirmationMarkers.length,
+        uniqueClientTotal: phoneMarkers.length,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+  return normalizeMetrics(updated || {
     _id: BOOKING_COUNTER_ID,
     bookingTotal: confirmationMarkers.length,
     uniqueClientTotal: phoneMarkers.length,
     createdAt: now,
     updatedAt: now,
   });
-
-  return normalizeMetrics(seeded);
 }
 
 // Booking confirmation logic is intentionally isolated here.
