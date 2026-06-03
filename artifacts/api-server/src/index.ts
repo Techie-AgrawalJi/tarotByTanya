@@ -1,7 +1,7 @@
 import "./lib/env";
 import app from "./app";
 import { logger } from "./lib/logger";
-import { bootstrapBookingMetrics } from "./lib/bookingMetricsStore";
+import { bootstrapBookingMetrics, resetBookingMetrics } from "./lib/bookingMetricsStore";
 
 const rawPort = process.env["PORT"];
 
@@ -18,7 +18,11 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function start() {
-  await bootstrapBookingMetrics();
+  if (process.env.RESET_BOOKING_METRICS_ON_STARTUP === "1") {
+    await resetBookingMetrics();
+  } else {
+    await bootstrapBookingMetrics();
+  }
 
   app.listen(port, (err) => {
     if (err) {

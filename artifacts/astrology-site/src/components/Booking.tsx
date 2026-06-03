@@ -111,7 +111,6 @@ export function Booking() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState("");
   const [slotHint, setSlotHint] = useState("");
-  const availabilityQueryRef = useRef<string>("");
   const [guideAvailable, setGuideAvailable] = useState(true);
   const [guideAvailabilityLoading, setGuideAvailabilityLoading] = useState(true);
   const [guideAvailabilityMessage, setGuideAvailabilityMessage] = useState("Checking guide availability...");
@@ -288,23 +287,13 @@ export function Booking() {
         bookings: availabilityBookings,
       })
     : [];
-  const hasAvailabilityGrid = Boolean(selectedDate && selectedBlock && selectedDurationMinutes && !availabilityLoading && availabilityBookings.length > 0);
-  const hasLiveAvailability = Boolean(selectedDate && selectedBlock && selectedDurationMinutes && !availabilityLoading && !availabilityError && availabilityBookings.length > 0);
+  const hasLiveAvailability = Boolean(selectedDate && selectedBlock && selectedDurationMinutes && !availabilityLoading && !availabilityError);
   const selectedGridCell = availabilityGrid.find((cell) => cell.time === selectedSlot);
   const isSelectedSlotAvailable = Boolean(selectedGridCell && selectedGridCell.status === "available");
   const selectedBlockSummary = selectedBlock ? getBlockSummaryLabel(selectedBlock) : "";
-  const firstOpenSlot = hasAvailabilityGrid
+  const firstOpenSlot = hasLiveAvailability
     ? availabilityGrid.find((cell) => cell.status === "available")?.time || ""
     : "";
-  const availabilityStatusMessage = !selectedDate || !selectedDurationMinutes
-    ? "Select a date and duration to load live slots."
-    : availabilityLoading
-      ? "Checking live availability..."
-      : availabilityError && !hasAvailabilityGrid
-        ? availabilityError
-        : availabilityError && hasAvailabilityGrid
-          ? "Unable to refresh live slots. Showing last known availability."
-          : slotHint || "Select a green slot to continue.";
   const isPastSelectedDate = Boolean(selectedDate && selectedDate < today);
   const isBookingDisabled = guideAvailabilityLoading ? false : !guideAvailable;
   const submitButtonDisabled = isSubmitting || isBookingDisabled || (requiresSlotSelection && (availabilityLoading || !selectedDuration || !selectedDate || !selectedBlock || !selectedSlot || !isSelectedSlotAvailable));
@@ -317,14 +306,6 @@ export function Booking() {
       setAvailabilityLoading(false);
       setAvailabilityError(isPastSelectedDate ? "Please select today or a future date." : "");
       return;
-    }
-
-    const queryKey = `${selectedDate}|${selectedBlock}|${selectedDurationMinutes}`;
-    const isSameSelection = availabilityQueryRef.current === queryKey;
-    availabilityQueryRef.current = queryKey;
-
-    if (!isSameSelection) {
-      setAvailabilityBookings([]);
     }
 
     let cancelled = false;
@@ -387,7 +368,7 @@ export function Booking() {
         return;
       }
 
-      if (requiresSlotSelection && availabilityError && availabilityBookings.length === 0) {
+      if (requiresSlotSelection && availabilityError) {
         alert("Unable to reach booking server. Please wait a moment and try again.");
         return;
       }
@@ -907,7 +888,13 @@ export function Booking() {
                         <div>
                           <div className="text-sm font-semibold text-white">{selectedBlockSummary}</div>
                           <div className="text-xs text-white/70">
-                            {availabilityStatusMessage}
+                            {!selectedDate || !selectedDurationMinutes
+                              ? "Select a date and duration to load live slots."
+                              : availabilityLoading
+                                ? "Checking live availability..."
+                                : availabilityError
+                                  ? availabilityError
+                                  : slotHint || "Select a green slot to continue."}
                           </div>
                         </div>
                         {selectedDate && selectedDurationMinutes > 0 && firstOpenSlot && (
@@ -937,69 +924,62 @@ export function Booking() {
                       </div>
 
                       {selectedDate && selectedDurationMinutes > 0 ? (
-                        hasAvailabilityGrid ? (
-                          <>
-                            {availabilityError && (
-                              <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-4 text-sm text-amber-100">
-                                Live slots could not be refreshed. Showing last known availability.
-                              </div>
-                            )}
-                            <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(108px,1fr))] gap-2 max-h-80 overflow-y-auto pr-1">
-                              {availabilityGrid.map((cell) => {
-                                const isSelected = selectedSlot === cell.time;
-                                const isAvailable = cell.status === "available";
-                                const isBuffer = cell.status === "buffer";
-                                const unavailableLabel = `Unavailable. Next open slot: ${cell.nextAvailableSlot ? minutesToDisplayTime(parseTimeToMinutes(cell.nextAvailableSlot) ?? 0) : "none"}.`;
-
-                                return (
-                                  <button
-                                    key={cell.time}
-                                    type="button"
-                                    title={isAvailable ? "Available" : unavailableLabel}
-                                    onClick={() => {
-                                      if (!isAvailable) {
-                                        setSlotHint(unavailableLabel);
-                                        return;
-                                      }
-
-                                      setSelectedSlot(cell.time);
-                                      setSlotHint("This slot is available!");
-                                    }}
-                                    className={`rounded-xl border px-2 py-2 sm:px-3 sm:py-3 text-left transition-all ${
-                                      isSelected
-                                        ? "border-primary bg-primary/15 text-white"
-                                        : cell.status === "available"
-                                          ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50 hover:bg-emerald-400/20"
-                                          : cell.status === "booked"
-                                            ? "border-red-400/30 bg-red-400/10 text-red-100"
-                                            : isBuffer
-                                              ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
-                                              : "border-white/10 bg-white/5 text-white/55"
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-xs sm:text-sm font-semibold">{cell.displayTime}</div>
-                                      <span
-                                        className={`h-2 w-2 sm:h-2.5 sm:w-2.5 shrink-0 rounded-full ${
-                                          cell.status === "available"
-                                            ? "bg-emerald-300/90"
-                                            : cell.status === "booked"
-                                              ? "bg-red-300/90"
-                                              : isBuffer
-                                                ? "bg-amber-300/90"
-                                                : "bg-white/55"
-                                        }`}
-                                      />
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </>
-                        ) : (
+                        availabilityError ? (
                           <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-sm text-destructive">
                             Live slots could not be loaded right now. Please retry in a moment.
                           </div>
+                        ) : (
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(108px,1fr))] gap-2 max-h-80 overflow-y-auto pr-1">
+                          {availabilityGrid.map((cell) => {
+                            const isSelected = selectedSlot === cell.time;
+                            const isAvailable = cell.status === "available";
+                            const isBuffer = cell.status === "buffer";
+                            const unavailableLabel = `Unavailable. Next open slot: ${cell.nextAvailableSlot ? minutesToDisplayTime(parseTimeToMinutes(cell.nextAvailableSlot) ?? 0) : "none"}.`;
+
+                            return (
+                              <button
+                                key={cell.time}
+                                type="button"
+                                title={isAvailable ? "Available" : unavailableLabel}
+                                onClick={() => {
+                                  if (!isAvailable) {
+                                    setSlotHint(unavailableLabel);
+                                    return;
+                                  }
+
+                                  setSelectedSlot(cell.time);
+                                  setSlotHint("This slot is available!");
+                                }}
+                                className={`rounded-xl border px-2 py-2 sm:px-3 sm:py-3 text-left transition-all ${
+                                  isSelected
+                                    ? "border-primary bg-primary/15 text-white"
+                                    : cell.status === "available"
+                                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50 hover:bg-emerald-400/20"
+                                      : cell.status === "booked"
+                                        ? "border-red-400/30 bg-red-400/10 text-red-100"
+                                        : isBuffer
+                                          ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                          : "border-white/10 bg-white/5 text-white/55"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs sm:text-sm font-semibold">{cell.displayTime}</div>
+                                  <span
+                                    className={`h-2 w-2 sm:h-2.5 sm:w-2.5 shrink-0 rounded-full ${
+                                      cell.status === "available"
+                                        ? "bg-emerald-300/90"
+                                        : cell.status === "booked"
+                                          ? "bg-red-300/90"
+                                          : isBuffer
+                                            ? "bg-amber-300/90"
+                                            : "bg-white/55"
+                                    }`}
+                                  />
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                         )
                       ) : (
                         <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-sm text-white/70">
@@ -1008,6 +988,10 @@ export function Booking() {
                       )}
 
                     </div>
+                  )}
+
+                  {availabilityError && (
+                    <p className="text-destructive text-sm">{availabilityError}</p>
                   )}
                 </div>
               )}

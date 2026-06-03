@@ -404,8 +404,6 @@ router.delete("/bookings", async (req, res) => {
   }
 });
 
-export default router;
-
 // Admin debug routes
 router.get("/admin/db-bookings", async (req, res) => {
   try {
@@ -443,3 +441,5 @@ router.post("/admin/reset-booking-metrics", async (req, res) => {
     return res.status(500).json({ ok: false, error: String(err) });
   }
 });
+
+export default router;

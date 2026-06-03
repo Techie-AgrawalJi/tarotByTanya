@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { readBookings } from "./bookingsStore";
 import {
   getBookingConfirmationMarkerModel,
   getBookingCounterModel,
@@ -48,11 +47,6 @@ function getBookingPhone(booking: BookingLike): string {
   ).trim();
 }
 
-function isConfirmedBooking(booking: BookingLike): boolean {
-  const status = String(booking.status || booking.bookingStatus || booking.raw?.status || "").trim().toUpperCase();
-  return status === "BOOKED" || status === "COMPLETED";
-}
-
 function normalizeMetrics(record: any): BookingMetricsRecord {
   const now = new Date();
   return {
@@ -61,33 +55,6 @@ function normalizeMetrics(record: any): BookingMetricsRecord {
     uniqueClientTotal: Number(record?.uniqueClientTotal || 0),
     createdAt: record?.createdAt ? new Date(record.createdAt) : now,
     updatedAt: record?.updatedAt ? new Date(record.updatedAt) : now,
-  };
-}
-
-async function calculateBookingMetricsFromBookings(): Promise<BookingMetricsRecord> {
-  const bookings = await readBookings();
-  const confirmedBookings = bookings.filter(isConfirmedBooking);
-  const seenBookingKeys = new Set<string>();
-  const seenPhones = new Set<string>();
-
-  for (const booking of confirmedBookings) {
-    const bookingKey = getBookingKey(booking);
-    if (bookingKey) {
-      seenBookingKeys.add(bookingKey);
-    }
-    const phoneKey = normalizePhoneKey(getBookingPhone(booking));
-    if (phoneKey) {
-      seenPhones.add(phoneKey);
-    }
-  }
-
-  const now = new Date();
-  return {
-    id: BOOKING_COUNTER_ID,
-    bookingTotal: seenBookingKeys.size,
-    uniqueClientTotal: seenPhones.size,
-    createdAt: now,
-    updatedAt: now,
   };
 }
 
@@ -112,26 +79,7 @@ async function getMetricsDocument() {
 }
 
 export async function readBookingMetrics(): Promise<BookingMetricsRecord> {
-  const metrics = await getMetricsDocument();
-
-  if (metrics.bookingTotal === 0 && metrics.uniqueClientTotal === 0) {
-    const computed = await calculateBookingMetricsFromBookings();
-    if (computed.bookingTotal !== 0 || computed.uniqueClientTotal !== 0) {
-      const Counter = await getBookingCounterModel();
-      await Counter.findOneAndUpdate(
-        { _id: BOOKING_COUNTER_ID },
-        {
-          bookingTotal: computed.bookingTotal,
-          uniqueClientTotal: computed.uniqueClientTotal,
-          updatedAt: new Date(),
-        },
-        { upsert: true },
-      ).exec();
-      return computed;
-    }
-  }
-
-  return metrics;
+  return getMetricsDocument();
 }
 
 export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
@@ -159,92 +107,22 @@ export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
 
 export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
   const Counter = await getBookingCounterModel();
-  const Marker = await getBookingConfirmationMarkerModel();
-  const SeenPhone = await getSeenClientPhoneModel();
 
   const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
-  const bookings = await readBookings();
-  const completedBookings = bookings.filter(isConfirmedBooking);
-  const seenBookingKeys = new Set<string>();
-  const seenPhones = new Set<string>();
-  const confirmationMarkers: BookingLike[] = [];
-  const phoneMarkers: BookingLike[] = [];
+  if (existing) {
+    return normalizeMetrics(existing);
+  }
+
   const now = new Date();
-
-  for (const booking of completedBookings) {
-    const bookingKey = getBookingKey(booking);
-    if (!bookingKey || seenBookingKeys.has(bookingKey)) {
-      continue;
-    }
-    seenBookingKeys.add(bookingKey);
-    confirmationMarkers.push({
-      id: bookingKey,
-      bookingKey,
-      bookingId: String(booking.id || bookingKey),
-      paymentReference: String(booking.paymentReference || ""),
-      clientPhone: getBookingPhone(booking),
-      confirmedAt: booking.bookingTime || booking.updatedAt || now,
-    });
-
-    const phoneKey = normalizePhoneKey(getBookingPhone(booking));
-    if (phoneKey && !seenPhones.has(phoneKey)) {
-      seenPhones.add(phoneKey);
-      phoneMarkers.push({
-        id: phoneKey,
-        phoneKey,
-        phone: getBookingPhone(booking),
-        firstSeenAt: booking.bookingTime || booking.updatedAt || now,
-      });
-    }
-  }
-
-  const existingMarkers = await Marker.find({ bookingKey: { $in: confirmationMarkers.map((item) => item.bookingKey) } }).lean().exec();
-  const existingPhones = await SeenPhone.find({ phoneKey: { $in: phoneMarkers.map((item) => item.phoneKey) } }).lean().exec();
-  const existingMarkerKeys = new Set(existingMarkers.map((item: any) => String(item.bookingKey || item._id || "").trim()).filter(Boolean));
-  const existingPhoneKeys = new Set(existingPhones.map((item: any) => String(item.phoneKey || item._id || "").trim()).filter(Boolean));
-
-  const missingConfirmationMarkers = confirmationMarkers.filter((item) => !existingMarkerKeys.has(String(item.bookingKey || "").trim()));
-  const missingPhoneMarkers = phoneMarkers.filter((item) => !existingPhoneKeys.has(String(item.phoneKey || "").trim()));
-
-  if (missingConfirmationMarkers.length > 0) {
-    await Marker.insertMany(
-      missingConfirmationMarkers.map((item) => ({ ...item, _id: String(item.bookingKey) })),
-      { ordered: false },
-    );
-  }
-
-  if (missingPhoneMarkers.length > 0) {
-    await SeenPhone.insertMany(
-      missingPhoneMarkers.map((item) => ({ ...item, _id: String(item.phoneKey) })),
-      { ordered: false },
-    );
-  }
-
-  const updated = existing
-    ? await Counter.findOneAndUpdate(
-        { _id: BOOKING_COUNTER_ID },
-        {
-          bookingTotal: confirmationMarkers.length,
-          uniqueClientTotal: phoneMarkers.length,
-          updatedAt: now,
-        },
-        { returnDocument: "after", upsert: true },
-      ).lean().exec()
-    : await Counter.create({
-        _id: BOOKING_COUNTER_ID,
-        bookingTotal: confirmationMarkers.length,
-        uniqueClientTotal: phoneMarkers.length,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-  return normalizeMetrics(updated || {
+  const seeded = await Counter.create({
     _id: BOOKING_COUNTER_ID,
-    bookingTotal: confirmationMarkers.length,
-    uniqueClientTotal: phoneMarkers.length,
+    bookingTotal: 0,
+    uniqueClientTotal: 0,
     createdAt: now,
     updatedAt: now,
   });
+
+  return normalizeMetrics(seeded);
 }
 
 // Booking confirmation logic is intentionally isolated here.
