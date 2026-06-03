@@ -191,7 +191,7 @@ export default function Payment() {
         amount: Number(createOrderJson.amount || amountPaise),
         currency: String(createOrderJson.currency || "INR"),
         order_id: String(createOrderJson.order_id),
-        name: "Tarot By Tanya",
+        name: "DivineTanyaa",
         description: `${draft?.serviceLabel || "Booking"} - ${draft?.durationLabel || "Package"}`,
         prefill: {
           name: String(draft?.payload.name || ""),
@@ -374,7 +374,7 @@ export default function Payment() {
             >
               {paymentState === "redirecting"
                 ? `Opening ${gatewayLabel}...`
-                : `Pay with ${gatewayLabel}`}
+                : `Pay Now`}
             </button>
 
             <button
