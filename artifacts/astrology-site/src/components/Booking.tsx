@@ -37,7 +37,7 @@ type FormData = z.infer<typeof formSchema>;
 
 const servicePackages: Record<string, { time: string; price: string }[]> = {
   tarot: [
-    { time: "Chat Session - 15 Minutes", price: "₹1" },
+    { time: "Chat Session - 15 Minutes", price: "₹349" },
     { time: "Chat Session - 20 Minutes", price: "₹499" },
     { time: "Chat Session - 30 Minutes", price: "₹699" },
     { time: "Chat Session - 60 Minutes", price: "₹1,299" },
