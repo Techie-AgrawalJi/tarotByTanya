@@ -333,7 +333,7 @@ export function Booking() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setAvailabilityBookings([]);
+        // Preserve the last known availability grid on transient errors.
         setAvailabilityLoading(false);
         const message = error instanceof Error ? error.message : "Unable to load availability.";
         setAvailabilityError(message === "Failed to fetch" ? "Unable to reach booking server. Please try again in a moment." : message);

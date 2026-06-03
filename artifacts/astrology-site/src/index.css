@@ -255,3 +255,13 @@ input[disabled] {
   font-variant-caps: normal !important;
 }
 
+/* Brand display: force exact casing and disable font feature transforms */
+.brand-normal {
+  text-transform: none !important;
+  -webkit-text-transform: none !important;
+  font-variant-caps: normal !important;
+  font-variant: normal !important;
+  font-feature-settings: normal !important;
+  -webkit-font-variant: normal !important;
+}
+

@@ -25,12 +25,36 @@ export function Navbar() {
     }
   };
 
+  // Defensive: ensure brand stays exactly as authored even if other scripts mutate it.
+  useEffect(() => {
+    const id = "brand-static";
+    const desired = "DivineTanyaa";
+    const el = () => document.getElementById(id) as HTMLElement | null;
+    const apply = (target: HTMLElement | null) => {
+      if (!target) return;
+      try {
+        if (target.innerText !== desired) target.innerText = desired;
+        target.style.textTransform = "none";
+        target.style.setProperty("font-variant-caps", "normal", "important");
+        target.style.setProperty("font-feature-settings", "normal", "important");
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    apply(el());
+    const mo = new MutationObserver(() => apply(el()));
+    mo.observe(document.documentElement || document.body, { attributes: true, childList: true, subtree: true, characterData: true });
+    return () => mo.disconnect();
+  }, []);
+
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-        scrolled ? "bg-[#0a0a1a]/80 backdrop-blur-md py-3 shadow-lg" : "bg-transparent py-5"
-      }`}
+      className={
+        "fixed top-0 w-full z-50 transition-all duration-300 " +
+        (scrolled ? "bg-[#0a0a1a]/80 backdrop-blur-md py-3 shadow-lg" : "bg-transparent py-5")
+      }
     >
+      <style>{`#brand-static{text-transform: none !important; -webkit-text-transform: none !important; font-variant-caps: normal !important; font-variant: normal !important; font-feature-settings: normal !important; -webkit-font-variant: normal !important; font-family: Georgia, 'Times New Roman', serif !important;}`}</style>
       <div className="container mx-auto px-4 md:px-8 flex justify-between items-center">
         <div className="flex items-center gap-2 text-primary font-serif font-bold text-xl md:text-2xl">
           <Dialog>
@@ -46,7 +70,12 @@ export function Navbar() {
             </DialogContent>
           </Dialog>
 
-          <button onClick={() => scrollTo('hero')} className="ml-2 cursor-pointer text-left">
+          <button
+            id="brand-static"
+            onClick={() => scrollTo('hero')}
+            className="ml-2 cursor-pointer text-left normal-case brand-normal font-sans font-normal text-2xl md:text-3xl lg:text-4xl"
+            style={{ textTransform: "none", fontVariantCaps: "normal", fontVariant: "normal", fontFeatureSettings: "normal", fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
             DivineTanyaa
           </button>
         </div>

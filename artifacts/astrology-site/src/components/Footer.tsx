@@ -26,7 +26,7 @@ export function Footer() {
               className="flex items-center gap-3 text-foreground/70 hover:text-primary transition-colors"
             >
               <Mail className="w-4 h-4 text-primary shrink-0" />
-              <span>tanyaagrawal1711@gmail.com</span>
+              <span>tarotreadertanya11@gmail.com</span>
             </a>
             <a
               href="tel:+917877082223"
@@ -42,7 +42,7 @@ export function Footer() {
               className="flex items-center gap-3 text-foreground/70 hover:text-[#25D366] transition-colors"
             >
               <SiWhatsapp className="w-4 h-4 text-[#25D366] shrink-0" />
-              <span>WhatsApp chat</span>
+              <span>WhatsApp</span>
             </a>
           </div>
         </div>
@@ -160,8 +160,8 @@ export function Footer() {
         </div>
 
         <div className="pt-6 border-t border-white/5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-base text-foreground/40">
-          <p>© 2026 Divine Tanyaa · All Rights Reserved</p>
-          <p>Last Updated: May 18, 2026</p>
+          <p>© 2026 DivineTanyaa · All Rights Reserved</p>
+          <p>Last Updated: 3 June, 2026</p>
         </div>
       </div>
     </footer>
