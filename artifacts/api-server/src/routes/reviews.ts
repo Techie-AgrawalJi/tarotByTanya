@@ -38,8 +38,12 @@ const reviewInputSchema = z.object({
     .string()
     .trim()
     .max(4000)
-    .refine((value) => value.split(/\s+/).filter(Boolean).length >= 10, {
-      message: "Your review must be at least 10 words long.",
+    .refine((value) => {
+      const trimmed = value.trim();
+      const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+      return wordCount >= 5 || trimmed.length >= 25;
+    }, {
+      message: "Your review must be at least 5 words or 25 characters long.",
     }),
 });
 
@@ -126,11 +130,16 @@ router.post("/reviews", upload.array("photos", 4), async (req, res) => {
     const parsed = reviewInputSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      res.status(400).json({ message: "Please provide a valid name, rating, and optional review text." });
+      res.status(400).json({ message: "Please provide a valid name and rating. If including review text, it must be at least 5 words or 25 characters." });
       return;
     }
 
     const files = Array.isArray(req.files) ? req.files : [];
+
+    if (files.length === 0) {
+      res.status(400).json({ message: "Please upload at least one image for your review." });
+      return;
+    }
 
     // Validate and upload images to Cloudinary
     const uploadedImages = await Promise.all(
@@ -174,7 +183,7 @@ router.post("/reviews", upload.array("photos", 4), async (req, res) => {
     const review: ReviewDocument = {
       name: parsed.data.name,
       rating: parsed.data.rating,
-      reviewText: parsed.data.reviewText,
+      reviewText: parsed.data.reviewText ?? null,
       images,
       createdAt: new Date(),
       updatedAt: new Date(),

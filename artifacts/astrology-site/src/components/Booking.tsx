@@ -78,6 +78,9 @@ function scrollToSection(id: string): void {
   }
 }
 
+const genderOptions = ["Female", "Male", "Non-binary", "Prefer not to say"];
+const maritalOptions = ["Single", "In a Relationship", "Married", "Divorced", "Widowed", "Separated"];
+
 function getLocalDateString(date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -93,16 +96,17 @@ export function Booking() {
   const [submittedName, setSubmittedName] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [selectedDurationLabel, setSelectedDurationLabel] = useState("");
-  const [isDurationOpen, setIsDurationOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<"gender" | "marital" | "service" | "duration" | null>(null);
   const durationMenuRef = useRef<HTMLDivElement | null>(null);
-  const [isMaritalOpen, setIsMaritalOpen] = useState(false);
   const maritalMenuRef = useRef<HTMLDivElement | null>(null);
   const [selectedMarital, setSelectedMarital] = useState("");
-  const [isGenderOpen, setIsGenderOpen] = useState(false);
   const genderMenuRef = useRef<HTMLDivElement | null>(null);
   const [selectedGender, setSelectedGender] = useState("");
-  const [isServiceOpen, setIsServiceOpen] = useState(false);
   const serviceMenuRef = useRef<HTMLDivElement | null>(null);
+  const isGenderOpen = openDropdown === "gender";
+  const isMaritalOpen = openDropdown === "marital";
+  const isServiceOpen = openDropdown === "service";
+  const isDurationOpen = openDropdown === "duration";
 
   const [selectedBlock, setSelectedBlock] = useState<TimeBlockKey | "">("");
   const [selectedDate, setSelectedDate] = useState(today);
@@ -117,7 +121,7 @@ export function Booking() {
   const [guideAvailabilityMessage, setGuideAvailabilityMessage] = useState("Checking guide availability...");
 
   const styleTag = `
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@400;500;600&family=Playfair+Display:wght@300;400;700&display=swap');
     .heading-luxury { font-family: 'Playfair Display', serif; font-weight: 300; letter-spacing: 0.05em; }
   `;
 
@@ -128,6 +132,7 @@ export function Booking() {
     },
   });
 
+  const dateField = register("date");
   const watchedService = watch("service");
 
   useEffect(() => {
@@ -178,6 +183,24 @@ export function Booking() {
     }
     if (typeof payload.message === "string") setValue("message", payload.message);
   }, [setValue, today]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        genderMenuRef.current?.contains(target) ||
+        maritalMenuRef.current?.contains(target) ||
+        serviceMenuRef.current?.contains(target) ||
+        durationMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpenDropdown(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -463,43 +486,6 @@ export function Booking() {
     }
   };
 
-  const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextService = e.target.value;
-    setSelectedService(nextService);
-    setValue("service", nextService, { shouldValidate: true, shouldDirty: true });
-    setValue("duration", "", { shouldValidate: true, shouldDirty: true });
-    setIsDurationOpen(false);
-    // Reset slot and date when service changes
-    setSelectedSlot("");
-    setSelectedDate("");
-    setSelectedBlock("");
-    setAvailabilityBookings([]);
-    setSlotHint("");
-  };
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      if (durationMenuRef.current && !durationMenuRef.current.contains(event.target as Node)) {
-        setIsDurationOpen(false);
-      }
-      if (maritalMenuRef.current && !maritalMenuRef.current.contains(event.target as Node)) {
-        setIsMaritalOpen(false);
-      }
-      if (genderMenuRef.current && !genderMenuRef.current.contains(event.target as Node)) {
-        setIsGenderOpen(false);
-      }
-      if (serviceMenuRef.current && !serviceMenuRef.current.contains(event.target as Node)) {
-        setIsServiceOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, []);
-
   return (
     <section id="booking" data-testid="booking-section" className="py-12 md:py-24 px-4 relative z-10">
       <div className="container mx-auto max-w-4xl">
@@ -533,26 +519,26 @@ export function Booking() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 relative z-10">
             <fieldset disabled={isBookingDisabled} className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Full Name</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Full Name</label>
                 <input 
                   {...register("name")}
                   data-testid="input-name"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                   placeholder="Jane Doe"
                 />
                 {errors.name && <p className="text-destructive text-sm mt-1">{errors.name.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Email Address</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Email Address</label>
                 <input 
                   {...register("email")}
                   type="email"
                   autoComplete="email"
                   data-testid="input-email"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                   placeholder="jane@example.com"
                 />
                 <p className="text-sm text-foreground/60 mt-1">This email will be used to send your confirmation. Please use your own email address.</p>
@@ -560,72 +546,79 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">WhatsApp Number</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">WhatsApp Number</label>
                 <input 
                   {...register("phone")}
                   type="tel"                                                                                                
                   inputMode="tel"
                   data-testid="input-phone"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                   placeholder="+91 98765 43210"
                 />
                 {errors.phone && <p className="text-destructive text-sm mt-1">{errors.phone.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Date of Birth</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Date of Birth</label>
                 <input 
                   {...register("dob")}
                   type="date"
                   data-testid="input-dob"
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50"
                 />
                 {errors.dob && <p className="text-destructive text-sm mt-1">{errors.dob.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Birth Place</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Birth Place</label>
                 <input
                   {...register("birthLocation")}
                   data-testid="input-birth-location"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                   placeholder="City, State, Country of Birth"
                 />
                 {errors.birthLocation && <p className="text-destructive text-sm mt-1">{errors.birthLocation.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Gender</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Gender</label>
                 <div className="relative" ref={genderMenuRef}>
                   <input type="hidden" {...register("gender")} />
                   <button
                     type="button"
                     data-testid="select-gender"
                     aria-expanded={isGenderOpen}
-                    onClick={() => setIsGenderOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    onClick={() => setOpenDropdown((current) => (current === "gender" ? null : "gender"))}
+                    className={`w-full flex items-center justify-between gap-3 rounded-[10px] bg-[rgba(255,255,255,0.04)] border px-4 py-3 text-left transition-all duration-200 ${isGenderOpen ? "border-[rgba(201,162,39,0.7)] shadow-[0_0_0_2px_rgba(201,162,39,0.1)]" : "border-[rgba(201,162,39,0.25)]"}`}
                   >
-                    <span className={selectedGender ? "text-white" : "text-white/50"}>{selectedGender || "Select gender..."}</span>
-                    <span className="text-primary/60" />
+                    <span className={selectedGender ? "text-white" : "text-white/50"} style={{ fontFamily: "Raleway, sans-serif" }}>
+                      {selectedGender || "Select gender..."}
+                    </span>
+                    <span className={`text-[#c9a227] transition-transform duration-200 ${isGenderOpen ? "rotate-180" : ""}`}>▾</span>
                   </button>
 
                   {isGenderOpen && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                    <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl backdrop-blur-sm">
                       <div className="py-2">
-                        {["Female", "Male", "Other", "Prefer not to say"].map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => {
-                              setSelectedGender(opt);
-                              setValue("gender", opt, { shouldValidate: true, shouldDirty: true });
-                              setIsGenderOpen(false);
-                            }}
-                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
-                          >
-                            <span className="text-sm sm:text-base text-white">{opt}</span>
-                          </button>
-                        ))}
+                        {genderOptions.map((opt) => {
+                          const isSelected = selectedGender === opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => {
+                                setSelectedGender(opt);
+                                setValue("gender", opt, { shouldValidate: true, shouldDirty: true });
+                                setOpenDropdown(null);
+                              }}
+                              className={`group flex w-full items-center gap-3 px-[0.9rem] py-[0.65rem] text-left transition-colors ${isSelected ? "bg-[rgba(201,162,39,0.08)] text-[#e8d5a0]" : "text-[#b8aed4]"} hover:bg-[rgba(201,162,39,0.08)] hover:text-[#e8d5a0] border-b border-[rgba(201,162,39,0.07)] last:border-b-0`}
+                            >
+                              <span className={`inline-flex h-1.5 w-1.5 rounded-full shrink-0 ${isSelected ? "bg-[#c9a227]" : "bg-[rgba(201,162,39,0.25)]"}`} />
+                              <span style={{ fontFamily: "Raleway, sans-serif" }}>{opt}</span>
+                              {isSelected ? <span className="ml-auto text-[#c9a227]">✦</span> : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -634,43 +627,43 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Marital Status</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Marital Status</label>
                 <div className="relative" ref={maritalMenuRef}>
                   <button
                     type="button"
                     data-testid="select-marital-status"
                     aria-expanded={isMaritalOpen}
-                    onClick={() => setIsMaritalOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    onClick={() => setOpenDropdown((current) => (current === "marital" ? null : "marital"))}
+                    className={`w-full flex items-center justify-between gap-3 rounded-[10px] bg-[rgba(255,255,255,0.04)] border px-4 py-3 text-left transition-all duration-200 ${isMaritalOpen ? "border-[rgba(201,162,39,0.7)] shadow-[0_0_0_2px_rgba(201,162,39,0.1)]" : "border-[rgba(201,162,39,0.25)]"}`}
                   >
-                    <span className={selectedMarital ? "text-white" : "text-white/50"}>{selectedMarital || "Select marital status..."}</span>
-                    <span className="text-primary/60">{selectedMarital ? "" : ""}</span>
+                    <span className={selectedMarital ? "text-white" : "text-white/50"} style={{ fontFamily: "Raleway, sans-serif" }}>
+                      {selectedMarital || "Select marital status..."}
+                    </span>
+                    <span className={`text-[#c9a227] transition-transform duration-200 ${isMaritalOpen ? "rotate-180" : ""}`}>▾</span>
                   </button>
 
                   {isMaritalOpen && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                    <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl backdrop-blur-sm">
                       <div className="py-2">
-                        {[
-                          "Single",
-                          "Relationship",
-                          "Married",
-                          "Divorced",
-                          "Widowed",
-                          "Separated",
-                        ].map((option) => (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                              setSelectedMarital(option);
-                              setValue("maritalStatus", option, { shouldValidate: true, shouldDirty: true });
-                              setIsMaritalOpen(false);
-                            }}
-                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
-                          >
-                            <span className="text-sm sm:text-base text-white">{option}</span>
-                          </button>
-                        ))}
+                        {maritalOptions.map((option) => {
+                          const isSelected = selectedMarital === option;
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => {
+                                setSelectedMarital(option);
+                                setValue("maritalStatus", option, { shouldValidate: true, shouldDirty: true });
+                                setOpenDropdown(null);
+                              }}
+                              className={`group flex w-full items-center gap-3 px-[0.9rem] py-[0.65rem] text-left transition-colors ${isSelected ? "bg-[rgba(201,162,39,0.08)] text-[#e8d5a0]" : "text-[#b8aed4]"} hover:bg-[rgba(201,162,39,0.08)] hover:text-[#e8d5a0] border-b border-[rgba(201,162,39,0.07)] last:border-b-0`}
+                            >
+                              <span className={`inline-flex h-1.5 w-1.5 rounded-full shrink-0 ${isSelected ? "bg-[#c9a227]" : "bg-[rgba(201,162,39,0.25)]"}`} />
+                              <span style={{ fontFamily: "Raleway, sans-serif" }}>{option}</span>
+                              {isSelected ? <span className="ml-auto text-[#c9a227]">✦</span> : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -679,60 +672,64 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Occupation</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Occupation</label>
                 <input 
                   {...register("occupation")}
                   data-testid="input-occupation"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                   placeholder="Your profession"
                 />
                 {errors.occupation && <p className="text-destructive text-sm mt-1">{errors.occupation.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Service Type</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Service Type</label>
                 <div className="relative" ref={serviceMenuRef}>
                   <input type="hidden" {...register("service")} />
                   <button
                     type="button"
                     data-testid="select-service"
                     aria-expanded={isServiceOpen}
-                    onClick={() => setIsServiceOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    onClick={() => setOpenDropdown((current) => (current === "service" ? null : "service"))}
+                    className={`w-full flex items-center justify-between gap-3 rounded-[10px] bg-[rgba(255,255,255,0.04)] border px-4 py-3 text-left transition-all duration-200 ${isServiceOpen ? "border-[rgba(201,162,39,0.7)] shadow-[0_0_0_2px_rgba(201,162,39,0.1)]" : "border-[rgba(201,162,39,0.25)]"}`}
                   >
-                    <span className={selectedService ? "text-white" : "text-white/50"}>{selectedService || "Select a service..."}</span>
-                    <span className="text-primary/60" />
+                    <span className={selectedService ? "text-white" : "text-white/50"} style={{ fontFamily: "Raleway, sans-serif" }}>
+                      {selectedService || "Select a service..."}
+                    </span>
+                    <span className={`text-[#c9a227] transition-transform duration-200 ${isServiceOpen ? "rotate-180" : ""}`}>▾</span>
                   </button>
 
                   {isServiceOpen && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                    <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl backdrop-blur-sm">
                       <div className="py-2">
                         {[
                           { value: "Tarot", label: "Tarot Reading" },
                           { value: "Spell Casting & Healer", label: "Spell Casting & Healer" },
                           { value: "Manifestation Rituals", label: "Manifestation Rituals" },
                           { value: "Face Reading & Name", label: "Face Reading & Name Correction" },
-                        ].map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => {
-                              setSelectedService(opt.value);
-                              setValue("service", opt.value, { shouldValidate: true, shouldDirty: true });
-                              // reset duration when service changes
-                              setValue("duration", "", { shouldValidate: true, shouldDirty: true });
-                              setIsDurationOpen(false);
-                              setSelectedBlock("");
-                              setSelectedSlot("");
-                              setAvailabilityBookings([]);
-                              setSlotHint("");
-                              setIsServiceOpen(false);
-                            }}
-                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5"
-                          >
-                            <span className="text-sm sm:text-base text-white">{opt.label}</span>
-                          </button>
-                        ))}
+                        ].map((opt) => {
+                          const isSelected = selectedService === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setSelectedService(opt.value);
+                                setValue("service", opt.value, { shouldValidate: true, shouldDirty: true });
+                                setValue("duration", "", { shouldValidate: true, shouldDirty: true });
+                                setSelectedBlock("");
+                                setSelectedSlot("");
+                                setAvailabilityBookings([]);
+                                setSlotHint("");
+                                setOpenDropdown(null);
+                              }}
+                              className={`group flex w-full items-center gap-3 px-[0.9rem] py-[0.65rem] text-left transition-colors ${isSelected ? "bg-[rgba(201,162,39,0.08)] text-[#e8d5a0]" : "text-[#b8aed4]"} hover:bg-[rgba(201,162,39,0.08)] hover:text-[#e8d5a0] border-b border-[rgba(201,162,39,0.07)] last:border-b-0`}
+                            >
+                              <span style={{ fontFamily: "Raleway, sans-serif" }}>{opt.label}</span>
+                              {isSelected ? <span className="text-[#c9a227]">✦</span> : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -741,7 +738,7 @@ export function Booking() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Session Duration / Package</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Session Duration / Package</label>
                 <input type="hidden" {...register("duration")} />
                 <div className="relative" ref={durationMenuRef}>
                   <button
@@ -749,19 +746,19 @@ export function Booking() {
                     data-testid="select-duration"
                     disabled={!selectedService}
                     aria-expanded={isDurationOpen}
-                    onClick={() => setIsDurationOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-4 bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-left text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setOpenDropdown((current) => (current === "duration" ? null : "duration"))}
+                    className={`w-full flex items-center justify-between gap-3 rounded-[10px] bg-[rgba(255,255,255,0.04)] border px-4 py-3 text-left transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${isDurationOpen ? "border-[rgba(201,162,39,0.7)] shadow-[0_0_0_2px_rgba(201,162,39,0.1)]" : "border-[rgba(201,162,39,0.25)]"}`}
                   >
-                    <span className={selectedDuration || selectedDurationLabel ? "text-white" : "text-white/50"}>
-                      {selectedDuration ? selectedDuration.time : selectedDurationLabel || "Select duration / package..."}
+                    <span className={watch("duration") || selectedDurationLabel ? "text-white" : "text-white/50"} style={{ fontFamily: "Raleway, sans-serif" }}>
+                      {watch("duration") ? selectedDuration?.time : selectedDurationLabel || "Select duration / package..."}
                     </span>
-                    <span className={selectedDuration ? "text-primary font-semibold whitespace-nowrap" : "text-primary/60 whitespace-nowrap"}>
-                      {selectedDuration ? selectedDuration.price : ""}
+                    <span className={watch("duration") ? "text-[#c9a227] font-semibold whitespace-nowrap" : "text-[#c9a227]/70 whitespace-nowrap"}>
+                      {watch("duration") ? selectedDuration?.price : ""}
                     </span>
                   </button>
 
                   {isDurationOpen && selectedService && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0b0b18] shadow-2xl backdrop-blur-sm">
+                    <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl backdrop-blur-sm">
                       <div className="max-h-72 overflow-y-auto">
                         {currentPackages.map((pkg) => {
                           const isSelected = watch("duration") === pkg.time;
@@ -773,16 +770,15 @@ export function Booking() {
                               onClick={() => {
                                 setValue("duration", pkg.time, { shouldValidate: true, shouldDirty: true });
                                 setSelectedDurationLabel(pkg.time);
-                                setIsDurationOpen(false);
                                 setSelectedSlot("");
                                 setSlotHint("");
+                                setOpenDropdown(null);
                               }}
-                              className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/5 ${
-                                isSelected ? "bg-primary/10" : ""
-                              }`}
+                              className={`group flex w-full items-center justify-between gap-3 px-[0.9rem] py-[0.65rem] text-left transition-colors ${isSelected ? "bg-[rgba(201,162,39,0.08)] text-[#e8d5a0]" : "text-[#b8aed4]"} hover:bg-[rgba(201,162,39,0.08)] hover:text-[#e8d5a0] border-b border-[rgba(201,162,39,0.07)] last:border-b-0`}
                             >
-                              <span className="text-sm sm:text-base text-white">{pkg.time}</span>
-                              <span className="text-sm sm:text-base font-semibold text-white/70 whitespace-nowrap">{pkg.price}</span>
+                              <span style={{ fontFamily: "Raleway, sans-serif" }}>{pkg.time}</span>
+                              <span className="text-[#c9a227] font-semibold whitespace-nowrap">{pkg.price}</span>
+                              {isSelected ? <span className="ml-auto text-[#c9a227]">✦</span> : null}
                             </button>
                           );
                         })}
@@ -795,14 +791,15 @@ export function Booking() {
 
               {/* Preferred Date + Live Timeline for Tarot */}
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Preferred Date</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Preferred Date</label>
                 <input 
-                  {...register("date")}
+                  {...dateField}
                   type="date"
                   min={today}
-                  defaultValue={today}
+                  value={selectedDate}
                   data-testid="input-date"
                   onChange={(e) => {
+                    dateField.onChange?.(e);
                     const nextDate = e.target.value >= today ? e.target.value : today;
                     if (nextDate !== e.target.value) {
                       e.target.value = nextDate;
@@ -815,7 +812,7 @@ export function Booking() {
                     setAvailabilityBookings([]);
                     setSlotHint("");
                   }}
-                  className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40"
                 />
                 {errors.date && <p className="text-destructive text-sm mt-1">{errors.date.message}</p>}
               </div>
@@ -1003,12 +1000,12 @@ export function Booking() {
               )}
 
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-bold text-foreground/80 uppercase tracking-wider">Message or Focus Area (Optional)</label>
+                <label className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Message or Focus Area (Optional)</label>
                 <textarea 
                   {...register("message")}
                   data-testid="input-message"
                   rows={4}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40 resize-none"
                   placeholder="What brings you to seek guidance ?"
                 ></textarea>
               </div>

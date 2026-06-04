@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Star, Upload } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { format } from "date-fns";
 import {
   formatReviewCount,
@@ -71,6 +71,7 @@ export function Reviews() {
   const [selectedPreviews, setSelectedPreviews] = useState<string[]>([]);
   const [viewer, setViewer] = useState<{ images: ReviewImage[]; currentIndex: number } | null>(null);
   const [viewerDirection, setViewerDirection] = useState<1 | -1>(1);
+  const sliderRef = useRef<HTMLDivElement | null>(null);
   const [expandedReviewIds, setExpandedReviewIds] = useState<Record<string, boolean>>({});
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
@@ -89,7 +90,8 @@ export function Reviews() {
     if (!trimmed) return false;
 
     const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-    return wordCount >= 10;
+    // Accept if at least 5 words OR at least 25 characters
+    return wordCount >= 5 || trimmed.length >= 25;
   }
 
   const handleFileSelect = (files: FileList | null) => {
@@ -309,7 +311,39 @@ export function Reviews() {
 
   const totalReviews = summary.totalReviews ?? 0;
   const averageRating = summary.averageRating ?? 0;
-  const sliderReviews = reviews.length > 1 ? [...reviews, ...reviews] : reviews;
+  const sliderReviews = useMemo(() => {
+    if (reviews.length <= 1) return reviews;
+    return [...reviews, ...reviews];
+  }, [reviews]);
+
+  useEffect(() => {
+    if (!sliderRef.current || reviews.length <= 1) return;
+    const slider = sliderRef.current;
+    if (slider.scrollWidth <= slider.clientWidth) return;
+
+    let animationFrame = 0;
+    let lastTime = performance.now();
+
+    const step = (time: number) => {
+      if (!sliderRef.current) return;
+      const elapsed = time - lastTime;
+      if (elapsed >= 16) {
+        const current = sliderRef.current;
+        current.scrollLeft += 0.8;
+
+        const halfScrollWidth = current.scrollWidth / 2;
+        if (current.scrollLeft >= halfScrollWidth) {
+          current.scrollLeft -= halfScrollWidth;
+        }
+
+        lastTime = time;
+      }
+      animationFrame = requestAnimationFrame(step);
+    };
+
+    animationFrame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [reviews]);
 
   useEffect(() => {
     let cancelled = false;
@@ -354,25 +388,14 @@ export function Reviews() {
     const reviewText = review.reviewText?.trim() ?? "";
     const isExpanded = expandedReviewIds[review.id] ?? false;
     const showReadMore = reviewText.length > 0 && isLongReview(reviewText);
-    const floatOffset = index % 2 === 0 ? -6 : 6;
 
     return (
       <motion.article
-        initial={{ opacity: 0, y: 18 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        animate={{ y: [0, floatOffset, 0] }}
-        transition={{
-          opacity: { duration: 0.35 },
-          y: {
-            duration: 6.5 + index * 0.35,
-            repeat: Infinity,
-            ease: "easeInOut",
-            repeatType: "mirror",
-            delay: index * 0.12,
-          },
-        }}
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ opacity: { duration: 0.35 } }}
         viewport={{ once: true, margin: "-40px" }}
-        className="group flex h-full min-h-72 w-66 shrink-0 flex-col overflow-hidden rounded-[1.55rem] border border-[#5d4aa5]/18 bg-[linear-gradient(180deg,rgba(25,19,54,0.88)_0%,rgba(15,14,36,0.95)_100%)] p-3 shadow-[0_16px_40px_rgba(4,5,18,0.24)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-[#7a67c4]/24 hover:shadow-[0_22px_52px_rgba(4,5,18,0.34)] sm:w-70 sm:p-4 md:w-74"
+        className="group flex w-66 shrink-0 flex-col overflow-hidden rounded-[1.55rem] border border-[#5d4aa5]/18 bg-[linear-gradient(180deg,rgba(25,19,54,0.88)_0%,rgba(15,14,36,0.95)_100%)] p-3 shadow-[0_16px_40px_rgba(4,5,18,0.24)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-[#7a67c4]/24 hover:shadow-[0_22px_52px_rgba(4,5,18,0.34)] sm:w-70 sm:p-4 md:w-74"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -386,7 +409,7 @@ export function Reviews() {
           </div>
         </div>
 
-        <div className="mt-3 flex-1">
+        <div className="mt-3">
           {reviewText ? (
             <p
               className={`text-sm leading-6 text-white/72 ${isExpanded ? "" : "line-clamp-3"}`}
@@ -408,9 +431,11 @@ export function Reviews() {
           ) : null}
         </div>
 
-        <div className="mt-3">
-          <ReviewMediaPreview images={review.images} reviewName={review.name} />
-        </div>
+        {review.images && review.images.length > 0 ? (
+          <div className="mt-3">
+            <ReviewMediaPreview images={review.images} reviewName={review.name} />
+          </div>
+        ) : null}
       </motion.article>
     );
   }
@@ -467,18 +492,28 @@ export function Reviews() {
       return;
     }
 
+    if (!reviewTextValue) {
+      setFormError("Please write a review description of at least 5 words or 25 characters.");
+      setIsSubmitting(false);
+      return;
+    }
+
     if (!isReviewTextLongEnough(reviewTextValue)) {
-      setFormError("Please write at least 10 words about your experience.");
+      setFormError("Please write at least 5 words or 25 characters about your experience.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (selectedFiles.length === 0) {
+      setFormError("Please upload at least one image for your review.");
       setIsSubmitting(false);
       return;
     }
 
     // compress images in parallel before upload to reduce payload size & time
     formData.delete("photos");
-    if (selectedFiles.length > 0) {
-      const compressed = await Promise.all(selectedFiles.map((f) => compressImage(f, 1400, 0.78)));
-      compressed.forEach((file) => formData.append("photos", file));
-    }
+    const compressed = await Promise.all(selectedFiles.map((f) => compressImage(f, 1400, 0.78)));
+    compressed.forEach((file) => formData.append("photos", file));
 
     try {
       const response = await fetch(apiUrl("/api/reviews"), {
@@ -566,19 +601,21 @@ export function Reviews() {
         .btn-shimmer { background: linear-gradient(90deg, #d4af37 0%, #f0e68c 25%, #d4af37 50%, #f0e68c 75%, #d4af37 100%); background-size: 1000px 100%; animation: shimmer 3s infinite; }
         .btn-shimmer:hover { animation: shimmer 1.5s infinite; }
 
-        @keyframes review-slider {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
         .review-slider-track {
           display: flex;
+          flex-wrap: nowrap;
           width: max-content;
           gap: 1rem;
           align-items: stretch;
-          animation: review-slider 52s linear infinite;
         }
-        .review-slider-track:hover {
-          animation-play-state: paused;
+        .review-slider-outer {
+          overflow-x: auto;
+          overflow-y: hidden;
+          -ms-overflow-style: none; /* IE and Edge */
+          scrollbar-width: none; /* Firefox */
+        }
+        .review-slider-outer::-webkit-scrollbar {
+          display: none; /* Safari and Chrome */
         }
 
       `}</style>
@@ -592,7 +629,7 @@ export function Reviews() {
           Share your reading experience in your own words. Your review helps future clients feel confident about their session.
         </p>
 
-        <div className="mx-auto mt-8 w-full overflow-hidden">
+        <div ref={sliderRef} className="mx-auto mt-8 w-full overflow-x-auto review-slider-outer">
           {reviews.length > 0 ? (
             <div className="review-slider-track py-2">
               {sliderReviews.map((review, index) => (
@@ -620,17 +657,17 @@ export function Reviews() {
           <form className="space-y-8" onSubmit={handleSubmit}>
             <div className="grid gap-8 md:grid-cols-2">
               <label className="space-y-2 md:col-span-1 group">
-                <span className="text-xs font-light uppercase tracking-widest text-primary/70">Name</span>
+                <span className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Name</span>
                 <input 
                   name="name" 
                   required 
                   minLength={2} 
-                  className="w-full bg-transparent px-0 py-2 text-white text-sm border-b border-primary/30 outline-none transition-colors focus:border-primary/80 placeholder:text-white/20" 
+                  className="w-full bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40" 
                   placeholder="Your name" 
                 />
               </label>
               <div className="space-y-2 md:col-span-1">
-                <span className="text-xs font-light uppercase tracking-widest text-primary/70">Your Rating</span>
+                <span className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Your Rating</span>
                 <div className="flex gap-1 items-center">
                   {[1, 2, 3, 4, 5].map((star) => {
                     const active = star <= selectedRating;
@@ -650,32 +687,31 @@ export function Reviews() {
               </div>
 
               <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-light uppercase tracking-widest text-primary/70">Your Experience</span>
+                <span className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Your Experience</span>
                 <textarea 
                   name="reviewText" 
-                  rows={4} 
+                  rows={5} 
                   required
-                  minLength={50}
                   aria-describedby="reviewText-help"
-                  className="w-full resize-none bg-transparent px-0 py-2 text-white text-sm border-b border-primary/30 outline-none transition-colors focus:border-primary/80 placeholder:text-white/20" 
+                  className="w-full resize-none bg-white/5 border border-primary/20 rounded-2xl px-4 py-3 text-white text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary/50 placeholder:text-white/40 min-h-28" 
                   placeholder="Share how the reading helped you..." 
                 />
-                <p id="reviewText-help" className="text-[11px] text-foreground/45">
-                  Please write at least 50 characters or 10 words.
+                <p id="reviewText-help" className="text-sm text-foreground/50">
+                  Required. Please write at least 25 characters or 5 words.
                 </p>
               </label>
 
-              <label htmlFor="photos-upload" className={`space-y-2 md:col-span-2 cursor-pointer group relative block ${dragOver ? "bg-primary/5 border-primary/40" : ""} p-6 rounded-xl border-2 border-dashed transition-all ${dragOver ? "border-primary/40" : "border-primary/20"}`}
+              <label htmlFor="photos-upload" className={`space-y-2 md:col-span-2 cursor-pointer group relative block ${dragOver ? "bg-primary/5 border-primary/40" : "bg-white/5 border-primary/20"} p-6 rounded-2xl border-2 border-dashed transition-all ${dragOver ? "border-primary/40" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files); }}
               >
-                <input id="photos-upload" name="photos" type="file" accept="image/*" multiple onChange={(e) => handleFileSelect(e.target.files)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                <input id="photos-upload" name="photos" type="file" accept="image/*" multiple required onChange={(e) => handleFileSelect(e.target.files)} className="absolute inset-0 opacity-0 cursor-pointer" />
                 <div className="text-center pointer-events-none">
                   <Upload className="w-6 h-6 mx-auto mb-2 text-primary/50 group-hover:text-primary/70 transition-colors" />
-                  <span className="text-xs font-light uppercase tracking-widest text-primary/70">Drop your photos here or browse</span>
+                  <span className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/80">Drop your chat screenshots here or browse</span>
                 </div>
-                <p className="text-xs text-foreground/40 text-center mt-2 pointer-events-none">Optional. JPG, PNG, WEBP up to 5MB each.</p>
+                <p className="text-xs text-foreground/40 text-center mt-2 pointer-events-none">Required. JPG, PNG, WEBP up to 5MB each. <br /> If required you can upload more than one images </p>
               </label>
 
               {selectedPreviews.length > 0 && (
