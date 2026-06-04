@@ -226,8 +226,8 @@ function buildHtmlBody(booking: BookingLike, options: EmailConfirmationOptions =
   const contactPhone = isGuideEmail ? clientContact : guideContact;
   const contactHeading = isGuideEmail ? "📲 Contact the client" : `📲 Connect with ${guideName}`;
   const contactDescription = isGuideEmail
-    ? "Reach out to the client on WhatsApp so you can confirm their booking and start the session."
-    : "Send a screenshot of this confirmation to the guide so they can match your booking and start the session.";
+    ? "Reach out to the client on WhatsApp so you can confirm their booking and start the session on time."
+    : "Reach out to the Guide on WhatsApp so they can confirm your booking and start the session on time.";
 
   return `
     <style>
@@ -260,7 +260,7 @@ function buildHtmlBody(booking: BookingLike, options: EmailConfirmationOptions =
               </tr>
               <tr>
                 <td class="details-box-container" style="padding:0 34px 24px 34px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:-12px;background:#151730;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:24px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;background:#151730;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:24px;">
                     <tr>
                       <td style="padding-bottom:8px;">
                         <div style="color:#d4b46a;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;">Booking details</div>
@@ -292,13 +292,7 @@ function buildHtmlBody(booking: BookingLike, options: EmailConfirmationOptions =
                         <div style="font-weight:800;color:#ffd88a;margin-bottom:6px;font-size:15px;">${contactHeading}</div>
                         <div style="margin-bottom:12px;color:#cdd6e6;font-size:14px;line-height:1.5;">${contactDescription}</div>
                         <div style="margin-top:12px;text-align:center;">
-                          <a href="https://wa.me/${String(contactPhone).replace(/[^0-9]/g,"")}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;background:#25D366;color:#0f1020;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;margin:0 auto;">
-                            <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;background:#ffffff;border-radius:50%;">
-                              <svg width="14" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:block;">
-                                <path fill="#25D366" d="M20.52 3.48A11.94 11.94 0 0 0 12 0C5.373 0 0 5.372 0 12c0 2.084.545 4.035 1.49 5.7L0 24l6.62-1.74A11.93 11.93 0 0 0 12 24c6.627 0 12-5.373 12-12 0-3.21-1.25-6.213-3.48-8.52Z"/>
-                                <path fill="#0f1020" d="M17.71 14.16c-.23-.11-1.35-.67-1.56-.75-.21-.08-.36-.11-.52.08-.16.19-.61.67-.75.81-.14.14-.27.16-.5.06-.23-.1-1.01-.34-1.84-.98-.77-.69-1.29-1.54-1.44-1.8-.15-.27-.01-.42.1-.53.1-.1.23-.25.34-.38.11-.12.13-.22.2-.36.06-.14.03-.25-.02-.35-.05-.1-.46-1.05-.63-1.44-.17-.39-.33-.34-.46-.35-.12-.01-.25-.01-.38-.01-.13 0-.32.04-.49.22-.16.18-.61.59-.61 1.38 0 .79.57 1.55.65 1.7.08.15 1.18 1.88 2.86 2.71.4.18.74.28 1.02.36.43.14.82.12 1.13.07.33-.05.93-.35 1.06-.76.13-.41.13-.75.09-.82-.05-.08-.18-.13-.36-.22Z"/>
-                              </svg>
-                            </span>
+                          <a href="https://wa.me/${String(contactPhone).replace(/[^0-9]/g,"")}" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;background:#25D366;color:#0f1020;border-radius:10px;font-weight:700;text-decoration:none;font-size:14px;margin:0 auto;">
                             <span style="vertical-align:middle;color:#0f1020;">${contactPhone}</span>
                           </a>
                         </div>
