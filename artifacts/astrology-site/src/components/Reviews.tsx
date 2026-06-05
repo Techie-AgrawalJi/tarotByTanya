@@ -604,7 +604,9 @@ export function Reviews() {
         .review-slider-track {
           display: flex;
           flex-wrap: nowrap;
+          min-width: 100%;
           width: max-content;
+          justify-content: center;
           gap: 1rem;
           align-items: stretch;
         }

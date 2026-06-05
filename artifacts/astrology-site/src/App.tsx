@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
 import Payment from "@/pages/Payment";
+import { ReadCarefullyModal } from "@/components/ReadCarefullyModal";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <ReadCarefullyModal />
         <WouterRouter base={basePath}>
           <Router />
         </WouterRouter>
