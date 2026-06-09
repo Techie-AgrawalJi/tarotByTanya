@@ -12,14 +12,25 @@ import { Button } from "@/components/ui/button"
 const DISPLAY_SECONDS = 5
 
 export function ReadCarefullyModal() {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [remainingSeconds, setRemainingSeconds] = useState(DISPLAY_SECONDS)
   const [readyToClose, setReadyToClose] = useState(false)
 
   useEffect(() => {
-    if (!open) {
-      return
+    // Do not show the modal if the user is navigating back from the admin panel
+    const referrer = document.referrer
+    const isFromAdmin =
+      referrer.includes("/admin") ||
+      window.location.search.includes("from=admin") ||
+      sessionStorage.getItem("visited_admin") === "1"
+
+    if (!isFromAdmin) {
+      setOpen(true)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
 
     const intervalId = window.setInterval(() => {
       setRemainingSeconds((current) => {
@@ -35,10 +46,7 @@ export function ReadCarefullyModal() {
   }, [open])
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && !readyToClose) {
-      return
-    }
-
+    if (!nextOpen && !readyToClose) return
     setOpen(nextOpen)
   }
 
