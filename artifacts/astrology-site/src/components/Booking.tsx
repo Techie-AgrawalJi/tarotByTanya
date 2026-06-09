@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm } from "react-hook-form";
@@ -139,6 +141,12 @@ export function Booking() {
   const [slotHint, setSlotHint] = useState("");
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const dateBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [datePickerPos, setDatePickerPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
 
   function toIso(date: Date) {
@@ -255,6 +263,7 @@ export function Booking() {
       setOpenDropdown(null);
       if (datePickerRef.current && !datePickerRef.current.contains(target)) {
         setShowDatePicker(false);
+        setDatePickerPos(null);
       }
     };
 
@@ -262,8 +271,9 @@ export function Booking() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   useEffect(() => {
-    // load blocked dates from shared data source (localStorage)
-    setBlockedDates(readBlockedDates());
+    readBlockedDates().then((dates) => {
+      setBlockedDates(dates);
+    });
     setShowDatePicker(false);
   }, []);
 
@@ -1145,8 +1155,25 @@ export function Booking() {
                     </label>
                     <div className="relative w-full" ref={datePickerRef}>
                       <button
+                        ref={dateBtnRef}
                         type="button"
-                        onClick={() => setShowDatePicker((s) => !s)}
+                        onClick={() => {
+                          if (showDatePicker) {
+                            setShowDatePicker(false);
+                            setDatePickerPos(null);
+                          } else {
+                            const rect =
+                              dateBtnRef.current?.getBoundingClientRect();
+                            if (rect) {
+                              setDatePickerPos({
+                                top: rect.bottom + window.scrollY + 6,
+                                left: rect.left + window.scrollX,
+                                width: rect.width,
+                              });
+                            }
+                            setShowDatePicker(true);
+                          }
+                        }}
                         className={`w-full flex items-center justify-between gap-3 rounded-[10px] bg-[rgba(255,255,255,0.04)] border px-4 py-3 text-left transition-all duration-200 ${showDatePicker ? "border-[rgba(201,162,39,0.7)] shadow-[0_0_0_2px_rgba(201,162,39,0.1)]" : "border-[rgba(201,162,39,0.25)]"}`}
                         data-testid="select-date"
                       >
@@ -1174,99 +1201,7 @@ export function Booking() {
                           ▾
                         </span>
                       </button>
-
-                      {showDatePicker && (
-                        <div className="absolute z-30 mt-2 p-3 rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl">
-                          <style>{`
-          .booking-daypicker .rdp-day_blocked {
-            background-color: rgba(239, 68, 68, 0.35) !important;
-            color: #fca5a5 !important;
-            border-radius: 4px;
-            pointer-events: none !important;
-          }
-        `}</style>
-                          <DayPicker
-                            className="booking-daypicker"
-                            mode="single"
-                            fromDate={(() => {
-                              const d = new Date();
-                              d.setHours(0, 0, 0, 0);
-                              return d;
-                            })()}
-                            selected={
-                              selectedDate
-                                ? new Date(
-                                    parseInt(selectedDate.split("-")[0]),
-                                    parseInt(selectedDate.split("-")[1]) - 1,
-                                    parseInt(selectedDate.split("-")[2]),
-                                  )
-                                : undefined
-                            }
-                            onSelect={(date: Date | undefined) => {
-                              if (!date) return;
-                              const year = date.getFullYear();
-                              const month = String(
-                                date.getMonth() + 1,
-                              ).padStart(2, "0");
-                              const day = String(date.getDate()).padStart(
-                                2,
-                                "0",
-                              );
-                              const iso = `${year}-${month}-${day}`;
-                              if (blockedDates.includes(iso)) return;
-                              setSelectedDate(iso);
-                              setValue("date", iso, {
-                                shouldValidate: true,
-                                shouldDirty: true,
-                              });
-                              setShowDatePicker(false);
-                            }}
-                            disabled={(date) => {
-                              const year = date.getFullYear();
-                              const month = String(
-                                date.getMonth() + 1,
-                              ).padStart(2, "0");
-                              const day = String(date.getDate()).padStart(
-                                2,
-                                "0",
-                              );
-                              const iso = `${year}-${month}-${day}`;
-                              return (
-                                iso < getLocalDateString() ||
-                                blockedDates.includes(iso)
-                              );
-                            }}
-                            modifiers={{
-                              blocked: (date) => {
-                                const year = date.getFullYear();
-                                const month = String(
-                                  date.getMonth() + 1,
-                                ).padStart(2, "0");
-                                const day = String(date.getDate()).padStart(
-                                  2,
-                                  "0",
-                                );
-                                return blockedDates.includes(
-                                  `${year}-${month}-${day}`,
-                                );
-                              },
-                            }}
-                            modifiersClassNames={{ blocked: "rdp-day_blocked" }}
-                          />
-                        </div>
-                      )}
                     </div>
-
-                    <p className="text-xs text-white/45 mt-1.5 flex items-center gap-1.5">
-                      <span className="inline-block h-2 w-2 rounded-full bg-red-500/80 shrink-0" />
-                      Dates highlighted in red are unavailable for booking.
-                    </p>
-
-                    {isDateBlocked && (
-                      <p className="text-destructive text-sm mt-1">
-                        Selected date is blocked for booking.
-                      </p>
-                    )}
                   </div>
 
                   {watchedService &&
@@ -1588,6 +1523,80 @@ export function Booking() {
           </motion.div>
         )}
       </AnimatePresence>
+      {showDatePicker &&
+        datePickerPos &&
+        createPortal(
+          <div
+            ref={datePickerRef}
+            style={{
+              position: "absolute",
+              top: datePickerPos.top,
+              left: datePickerPos.left,
+              width: datePickerPos.width,
+              zIndex: 9999,
+            }}
+            className="p-3 rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl"
+          >
+            <style>{`
+      .booking-daypicker .rdp-day_blocked {
+        background-color: rgba(239, 68, 68, 0.35) !important;
+        color: #fca5a5 !important;
+        border-radius: 4px;
+        pointer-events: none !important;
+      }
+    `}</style>
+            <DayPicker
+              className="booking-daypicker"
+              mode="single"
+              fromDate={(() => {
+                const d = new Date();
+                d.setHours(0, 0, 0, 0);
+                return d;
+              })()}
+              selected={
+                selectedDate
+                  ? new Date(
+                      parseInt(selectedDate.split("-")[0]),
+                      parseInt(selectedDate.split("-")[1]) - 1,
+                      parseInt(selectedDate.split("-")[2]),
+                    )
+                  : undefined
+              }
+              onSelect={(date: Date | undefined) => {
+                if (!date) return;
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                const iso = `${year}-${month}-${day}`;
+                if (blockedDates.includes(iso)) return;
+                setSelectedDate(iso);
+                setValue("date", iso, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                });
+                setShowDatePicker(false);
+                setDatePickerPos(null);
+              }}
+              disabled={(date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                const iso = `${year}-${month}-${day}`;
+                return iso < getLocalDateString() || blockedDates.includes(iso);
+              }}
+              modifiers={{
+                blocked: (date) => {
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, "0");
+                  const day = String(date.getDate()).padStart(2, "0");
+                  return blockedDates.includes(`${year}-${month}-${day}`);
+                },
+              }}
+              modifiersClassNames={{ blocked: "rdp-day_blocked" }}
+            />
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }
