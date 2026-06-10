@@ -1165,10 +1165,23 @@ export function Booking() {
                             const rect =
                               dateBtnRef.current?.getBoundingClientRect();
                             if (rect) {
+                              const PICKER_MIN_WIDTH = 320; // px — enough for the calendar
+                              const pickerWidth = Math.max(
+                                rect.width,
+                                PICKER_MIN_WIDTH,
+                              );
+                              const rawLeft = rect.left + window.scrollX;
+                              // Clamp so the right edge never exceeds the viewport (with 8px gutter)
+                              const maxLeft =
+                                window.innerWidth - pickerWidth - 8;
+                              const clampedLeft = Math.max(
+                                8,
+                                Math.min(rawLeft, maxLeft),
+                              );
                               setDatePickerPos({
                                 top: rect.bottom + window.scrollY + 6,
-                                left: rect.left + window.scrollX,
-                                width: rect.width,
+                                left: clampedLeft,
+                                width: pickerWidth,
                               });
                             }
                             setShowDatePicker(true);
@@ -1533,7 +1546,9 @@ export function Booking() {
               top: datePickerPos.top,
               left: datePickerPos.left,
               width: datePickerPos.width,
+              maxWidth: "calc(100vw - 16px)",
               zIndex: 9999,
+              overflowX: "hidden",
             }}
             className="p-3 rounded-[10px] border border-[rgba(201,162,39,0.3)] bg-[#12102a] shadow-2xl"
           >
