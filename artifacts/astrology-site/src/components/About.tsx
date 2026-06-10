@@ -16,43 +16,41 @@ function apiUrl(path: string): string {
 }
 
 export function About() {
-  const [reviewCount, setReviewCount] = useState(() => readCachedReviewSummary()?.totalReviews ?? 0);
-  const [bookingStats, setBookingStats] = useState({ uniqueClientsGuided: 0, totalBookings: 0 });
+  const [reviewCount, setReviewCount] = useState(
+    () => readCachedReviewSummary()?.totalReviews ?? 0,
+  );
+  const [bookingStats, setBookingStats] = useState({
+    uniqueClientsGuided: 0,
+    totalBookings: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadReviewCount(): Promise<void> {
       try {
-        const response = await fetch(apiUrl("/api/reviews"), { cache: "no-store" });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as { summary?: { totalReviews?: number } };
-
-        if (!cancelled) {
-          setReviewCount(data.summary?.totalReviews ?? 0);
-        }
+        const response = await fetch(apiUrl("/api/reviews"), {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          summary?: { totalReviews?: number };
+        };
+        if (!cancelled) setReviewCount(data.summary?.totalReviews ?? 0);
       } catch {
-        if (!cancelled) {
-          setReviewCount(0);
-        }
+        if (!cancelled) setReviewCount(0);
       }
     }
 
     async function loadBookingStats(): Promise<void> {
       try {
-        const response = await fetch(apiUrl("/api/bookings/stats"), { cache: "no-store" });
-        if (!response.ok) {
-          return;
-        }
-
+        const response = await fetch(apiUrl("/api/bookings/stats"), {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
         const data = (await response.json()) as {
           summary?: { uniqueClientsGuided?: number; totalBookings?: number };
         };
-
         if (!cancelled) {
           setBookingStats({
             uniqueClientsGuided: data.summary?.uniqueClientsGuided ?? 0,
@@ -60,10 +58,14 @@ export function About() {
           });
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled)
           setBookingStats({ uniqueClientsGuided: 0, totalBookings: 0 });
-        }
       }
+    }
+
+    function refreshAll(): void {
+      void loadReviewCount();
+      void loadBookingStats();
     }
 
     const handleReviewCountUpdate = (event: Event) => {
@@ -73,16 +75,33 @@ export function About() {
       }
     };
 
-    void loadReviewCount();
-    void loadBookingStats();
-    window.addEventListener(REVIEW_COUNT_UPDATED_EVENT, handleReviewCountUpdate as EventListener);
+    // Refresh when tab becomes visible again (user returns after booking)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshAll();
+    };
+
+    // Initial load
+    refreshAll();
+
+    // Poll every 30 seconds to catch bookings made in other tabs/sessions
+    const pollInterval = setInterval(refreshAll, 30_000);
+
+    window.addEventListener(
+      REVIEW_COUNT_UPDATED_EVENT,
+      handleReviewCountUpdate as EventListener,
+    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
-      window.removeEventListener(REVIEW_COUNT_UPDATED_EVENT, handleReviewCountUpdate as EventListener);
+      clearInterval(pollInterval);
+      window.removeEventListener(
+        REVIEW_COUNT_UPDATED_EVENT,
+        handleReviewCountUpdate as EventListener,
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
-
   return (
     <section
       id="about"
@@ -130,9 +149,7 @@ export function About() {
             )}
             <div className="absolute -bottom-6 -right-6 glass-card p-6 rounded-xl z-20 animate-pulse-slow">
               <Star className="w-8 h-8 text-primary mb-2" />
-              <div className="font-serif font-bold text-2xl text-white">
-                5+
-              </div>
+              <div className="font-serif font-bold text-2xl text-white">5+</div>
               <div className="text-sm text-foreground/80 uppercase tracking-widest">
                 Years Guiding
               </div>
@@ -146,25 +163,32 @@ export function About() {
             transition={{ duration: 0.8 }}
           >
             <div className="mb-8">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:gap-4">
-                  <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3 lg:mb-0">Meet Your Guide</h2>
-                  <span className="guide-name text-base sm:text-lg md:text-xl">Tanyaa Agrawal</span>
-                </div>
-                <div className="h-px w-16 bg-linear-to-r from-primary via-primary to-transparent"></div>
+              <div className="flex flex-col lg:flex-row lg:items-center lg:gap-4">
+                <h2 className="text-sm font-normal tracking-[0.2em] text-primary/80 uppercase mb-3 lg:mb-0">
+                  Meet Your Guide
+                </h2>
+                <span className="guide-name text-base sm:text-lg md:text-xl">
+                  Tanyaa Agrawal
+                </span>
+              </div>
+              <div className="h-px w-16 bg-linear-to-r from-primary via-primary to-transparent"></div>
             </div>
-            <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">A Beacon in the Cosmic Dark</h3>
+            <h3 className="heading-luxury text-4xl sm:text-5xl md:text-6xl text-white mb-6">
+              A Beacon in the Cosmic Dark
+            </h3>
 
             <div className="space-y-6 text-sm sm:text-base md:text-lg text-foreground/80 font-light leading-relaxed">
               <p>
-                As an experienced spiritual guide with over 5 years of
-                practice, I've dedicated my life to the art of tarot reading,
-                spell casting, energy healing, and manifestation rituals.
+                As an experienced spiritual guide with over 5 years of practice,
+                I've dedicated my life to the art of tarot reading, spell
+                casting, energy healing, and manifestation rituals.
               </p>
               <p>
-                My mission is to help souls unlock their true potential and navigate
-                their earthly journey by connecting with spiritual wisdom and cosmic energy.
-                Whether you're seeking clarity on relationships, career guidance, spiritual
-                healing, or wish to align with manifestation energy, I'm here to guide you.
+                My mission is to help souls unlock their true potential and
+                navigate their earthly journey by connecting with spiritual
+                wisdom and cosmic energy. Whether you're seeking clarity on
+                relationships, career guidance, spiritual healing, or wish to
+                align with manifestation energy, I'm here to guide you.
               </p>
             </div>
 
@@ -178,14 +202,20 @@ export function About() {
                 </div>
               </div>
               <div>
-                <div className="text-3xl font-serif font-bold text-white mb-2">{formatReviewCount(reviewCount)}</div>
-                <div className="text-sm uppercase tracking-wider text-primary">Total Reviews</div>
+                <div className="text-3xl font-serif font-bold text-white mb-2">
+                  {formatReviewCount(reviewCount)}
+                </div>
+                <div className="text-sm uppercase tracking-wider text-primary">
+                  Total Reviews
+                </div>
               </div>
               <div>
                 <div className="text-3xl font-serif font-bold text-white mb-2">
                   {bookingStats.totalBookings.toLocaleString()}
                 </div>
-                <div className="text-sm uppercase tracking-wider text-primary">Total Bookings</div>
+                <div className="text-sm uppercase tracking-wider text-primary">
+                  Total Bookings
+                </div>
               </div>
             </div>
           </motion.div>

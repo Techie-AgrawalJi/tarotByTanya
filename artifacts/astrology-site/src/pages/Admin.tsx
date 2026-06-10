@@ -276,6 +276,8 @@ export default function Admin() {
                 try {
                   const response = await fetch(`${API_BASE}/api/bookings`, {
                     method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ preserveStats: true }),
                   });
                   const json = await response.json();
                   if (json.ok) {
