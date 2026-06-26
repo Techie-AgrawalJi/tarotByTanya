@@ -25,13 +25,13 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     - name: Install frontend
-      working-directory: astrology-site
+      working-directory: artifacts/astrology-site
       run: npm ci
 
     - name: Build frontend
-      working-directory: astrology-site
+      working-directory: artifacts/astrology-site
       run: npm run build
 
     - name: Install backend
-      working-directory: api-server
+      working-directory: artifacts/api-server
       run: npm ci
