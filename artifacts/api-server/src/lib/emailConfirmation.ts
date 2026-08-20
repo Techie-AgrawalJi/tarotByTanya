@@ -140,16 +140,6 @@ function buildBookingDetails(booking: BookingLike): BookingDetail[] {
   const timeRange = formatTimeRange(firstNonEmpty(slotTiming.startTime, booking.startTime, raw.startTime), firstNonEmpty(slotTiming.endTime, booking.endTime, raw.endTime));
   const paymentAmount = formatAmount(firstNonEmpty(booking.paymentAmount, raw.paymentAmount, raw.amount));
 
-  // Derive a human-friendly slot block label when available
-  function slotBlockLabel(blockKey: unknown): string {
-    const key = String(blockKey || "").toLowerCase().trim();
-    if (!key) return "";
-    if (key === "morning") return "Morning (9:00 AM - 12:00 PM)";
-    if (key === "noon") return "Noon (2:00 PM - 5:00 PM)";
-    if (key === "evening") return "Evening (7:00 PM - 11:00 PM)";
-    return titleCase(key.replace(/[-_]/g, " "));
-  }
-
   const clientPhone = firstNonEmpty(booking.phone, booking.clientPhone, raw.phone, raw.clientPhone);
   const clientDob = firstNonEmpty(booking.dob, raw.dob, booking.raw?.dob);
   const birthPlace = firstNonEmpty(booking.birthLocation, raw.birthLocation, raw.placeOfBirth, raw.cityOfBirth);
@@ -158,14 +148,11 @@ function buildBookingDetails(booking: BookingLike): BookingDetail[] {
   const occupation = firstNonEmpty(booking.occupation, raw.occupation);
   const message = firstNonEmpty(booking.message, raw.message, booking.payload?.message);
   const packageLabel = firstNonEmpty(booking.durationLabel, booking.duration, raw.durationLabel, raw.duration);
-  const slotBlock = slotBlockLabel(firstNonEmpty(slotTiming.timeBlock, booking.slotTiming?.timeBlock, raw.slotTiming?.timeBlock, raw.timeBlock));
-  const slotStart = firstNonEmpty(slotTiming.startTime, booking.startTime, raw.startTime, booking.slotTiming?.startTime);
-  const slotEnd = firstNonEmpty(slotTiming.endTime, booking.endTime, raw.endTime, booking.slotTiming?.endTime);
-
+ 
   return [
-    { label: "Client name", value: firstNonEmpty(booking.clientName, raw.name, raw.clientName) },
-    { label: "WhatsApp / Phone", value: clientPhone },
-    { label: "Date of birth", value: clientDob },
+    { label: "Name", value: firstNonEmpty(booking.clientName, raw.name, raw.clientName) },
+    { label: "WhatsApp No.", value: clientPhone },
+    { label: "DOB", value: clientDob },
     { label: "Birth place", value: birthPlace },
     { label: "Gender", value: gender },
     { label: "Marital status", value: maritalStatus },
@@ -175,7 +162,6 @@ function buildBookingDetails(booking: BookingLike): BookingDetail[] {
     { label: "Package", value: packageLabel },
     { label: "Date", value: appointmentDate },
     { label: "Time", value: timeRange },
-    { label: "Slot", value: slotBlock || slotStart ? `${slotBlock}${slotBlock && slotStart ? " · " : ""}${slotStart || ""}${slotEnd ? ` - ${slotEnd}` : ""}` : "" },
     { label: "Duration", value: firstNonEmpty(booking.durationLabel, booking.durationMinutes ? `${booking.durationMinutes} minutes` : raw.duration, raw.durationMinutes ? `${raw.durationMinutes} minutes` : "") },
     { label: "Payment amount", value: paymentAmount },
   ].filter((item) => Boolean(item.value));
