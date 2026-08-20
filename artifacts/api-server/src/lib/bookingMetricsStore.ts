@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import fs from "fs/promises";
 import path from "path";
 import {
@@ -242,73 +241,50 @@ export async function recordConfirmedBooking(booking: BookingLike): Promise<Book
   const Counter = await getBookingCounterModel();
   const Marker = await getBookingConfirmationMarkerModel();
   const SeenPhone = await getSeenClientPhoneModel();
-  const session = await mongoose.startSession();
 
+  const now = new Date();
   try {
-    let nextCounter: BookingMetricsRecord | null = null;
-
-    await session.withTransaction(async () => {
-      const existingMarker = await Marker.findOne({
-        $or: [{ _id: bookingKey }, { bookingKey }],
-      }).session(session).lean().exec();
-      if (existingMarker) {
-        nextCounter = await getMetricsDocument();
-        return;
-      }
-
-      const now = new Date();
-      await Marker.updateOne(
-        { _id: bookingKey },
-        {
-          $setOnInsert: {
-            _id: bookingKey,
-            bookingKey,
-            bookingId: String(booking.id || bookingKey),
-            paymentReference: String(booking.paymentReference || booking.paymentId || ""),
-            clientPhone: bookingPhone,
-            confirmedAt: now,
-          },
-        },
-        { upsert: true, session },
-      );
-
-      const phoneWasNew = Boolean(phoneKey) && !(await SeenPhone.findOne({ $or: [{ _id: phoneKey }, { phoneKey }] }).session(session).lean().exec());
-
-      if (phoneWasNew && phoneKey) {
-        await SeenPhone.updateOne(
-          { _id: phoneKey },
-          {
-            $setOnInsert: {
-              _id: phoneKey,
-              phoneKey,
-              phone: bookingPhone,
-              firstSeenAt: now,
-            },
-          },
-          { upsert: true, session },
-        );
-      }
-
-      nextCounter = await Counter.findOneAndUpdate(
-        { _id: BOOKING_COUNTER_ID },
-        {
-          $inc: {
-            bookingTotal: 1,
-            ...(phoneWasNew && phoneKey ? { uniqueClientTotal: 1 } : {}),
-          },
-          $set: {
-            updatedAt: now,
-          },
-        },
-        { returnDocument: "after", upsert: true, session },
-      )
-        .lean()
-        .exec()
-        .then((doc) => normalizeMetrics(doc));
+    await Marker.create({
+      _id: bookingKey,
+      bookingKey,
+      bookingId: String(booking.id || bookingKey),
+      paymentReference: String(booking.paymentReference || booking.paymentId || ""),
+      clientPhone: bookingPhone,
+      confirmedAt: now,
     });
-
-    return nextCounter || (await readBookingMetrics());
-  } finally {
-    session.endSession();
+  } catch (error: any) {
+    if (error?.code === 11000) return readBookingMetrics();
+    throw error;
   }
+
+  let phoneWasNew = false;
+  if (phoneKey) {
+    try {
+      await SeenPhone.create({
+        _id: phoneKey,
+        phoneKey,
+        phone: bookingPhone,
+        firstSeenAt: now,
+      });
+      phoneWasNew = true;
+    } catch (error: any) {
+      if (error?.code !== 11000) throw error;
+    }
+  }
+
+  return Counter.findOneAndUpdate(
+    { _id: BOOKING_COUNTER_ID },
+    {
+      $inc: {
+        bookingTotal: 1,
+        ...(phoneWasNew ? { uniqueClientTotal: 1 } : {}),
+      },
+      $set: { updatedAt: now },
+      $setOnInsert: { createdAt: now },
+    },
+    { returnDocument: "after", upsert: true },
+  )
+    .lean()
+    .exec()
+    .then((doc) => normalizeMetrics(doc));
 }
