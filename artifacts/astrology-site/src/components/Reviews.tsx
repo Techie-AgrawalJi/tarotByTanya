@@ -74,6 +74,7 @@ export function Reviews() {
   const sliderRef = useRef<HTMLDivElement | null>(null);
   const [expandedReviewIds, setExpandedReviewIds] = useState<Record<string, boolean>>({});
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const reviewsHoveredRef = useRef(false);
 
   function getReviewTextValue(formEl: HTMLFormElement): string {
     const field = formEl.elements.namedItem("reviewText");
@@ -326,14 +327,22 @@ export function Reviews() {
 
     const step = (time: number) => {
       if (!sliderRef.current) return;
+      if (reviewsHoveredRef.current) {
+        animationFrame = requestAnimationFrame(step);
+        return;
+      }
       const elapsed = time - lastTime;
       if (elapsed >= 16) {
         const current = sliderRef.current;
-        current.scrollLeft += 0.8;
+        current.scrollLeft += 1.2;
 
-        const halfScrollWidth = current.scrollWidth / 2;
-        if (current.scrollLeft >= halfScrollWidth) {
-          current.scrollLeft -= halfScrollWidth;
+        const firstCard = current.firstElementChild?.firstElementChild as HTMLElement | null;
+        const firstDuplicateCard = current.firstElementChild?.children[reviews.length] as HTMLElement | undefined;
+        const loopDistance = firstCard && firstDuplicateCard
+          ? firstDuplicateCard.offsetLeft - firstCard.offsetLeft
+          : current.scrollWidth / 2;
+        if (loopDistance > 0 && current.scrollLeft >= loopDistance) {
+          current.scrollLeft -= loopDistance;
         }
 
         lastTime = time;
@@ -631,7 +640,25 @@ export function Reviews() {
           Share your reading experience in your own words. Your review helps future clients feel confident about their session.
         </p>
 
-        <div ref={sliderRef} className="mx-auto mt-8 w-full overflow-x-auto review-slider-outer">
+        <div
+          ref={sliderRef}
+          className="mx-auto mt-8 w-full overflow-x-auto review-slider-outer"
+          onMouseEnter={() => {
+            reviewsHoveredRef.current = true;
+          }}
+          onMouseLeave={() => {
+            reviewsHoveredRef.current = false;
+          }}
+          onPointerDown={() => {
+            reviewsHoveredRef.current = true;
+          }}
+          onPointerUp={() => {
+            reviewsHoveredRef.current = false;
+          }}
+          onPointerCancel={() => {
+            reviewsHoveredRef.current = false;
+          }}
+        >
           {reviews.length > 0 ? (
             <div className="review-slider-track py-2">
               {sliderReviews.map((review, index) => (
