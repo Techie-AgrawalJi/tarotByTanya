@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { CheckCircle2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import { clearBookingDraft, loadBookingDraft } from "@/lib/bookingCheckout";
+import { BOOKING_STATS_UPDATED_EVENT } from "@/lib/booking-stats";
 
 declare global {
   interface Window {
@@ -233,6 +234,7 @@ export default function Payment() {
             
             completed = true;
             setPaymentState("success");
+            window.dispatchEvent(new Event(BOOKING_STATS_UPDATED_EVENT));
             setMessage("Payment verified and booking confirmed. A confirmation email has been sent — please check your inbox or spam for booking details.");
             clearBookingDraft();
           } catch (err) {
@@ -243,6 +245,7 @@ export default function Payment() {
               if (confirmed) {
                 completed = true;
                 setPaymentState("success");
+                window.dispatchEvent(new Event(BOOKING_STATS_UPDATED_EVENT));
                 setMessage("Payment verified and booking confirmed. A confirmation email has been sent — please check your inbox or spam for booking details.");
                 clearBookingDraft();
                 return;

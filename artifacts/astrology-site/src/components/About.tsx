@@ -6,6 +6,12 @@ import {
   readCachedReviewSummary,
   REVIEW_COUNT_UPDATED_EVENT,
 } from "@/lib/review-count";
+import {
+  BOOKING_STATS_UPDATED_EVENT,
+  readCachedBookingStats,
+  writeCachedBookingStats,
+  type BookingStats,
+} from "@/lib/booking-stats";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 
 const CLIENT_PHOTO_URL =
@@ -16,13 +22,13 @@ function apiUrl(path: string): string {
 }
 
 export function About() {
+  const cachedBookingStats = readCachedBookingStats();
   const [reviewCount, setReviewCount] = useState(
     () => readCachedReviewSummary()?.totalReviews ?? 0,
   );
-  const [bookingStats, setBookingStats] = useState({
-    uniqueClientsGuided: 0,
-    totalBookings: 0,
-  });
+  const [bookingStats, setBookingStats] = useState<BookingStats>(
+    () => cachedBookingStats ?? { uniqueClientsGuided: 0, totalBookings: 0 },
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -48,18 +54,17 @@ export function About() {
           cache: "no-store",
         });
         if (!response.ok) return;
-        const data = (await response.json()) as {
-          summary?: { uniqueClientsGuided?: number; totalBookings?: number };
-        };
+        const data = (await response.json()) as { summary?: Partial<BookingStats> };
         if (!cancelled) {
-          setBookingStats({
+          const nextStats = {
             uniqueClientsGuided: data.summary?.uniqueClientsGuided ?? 0,
             totalBookings: data.summary?.totalBookings ?? 0,
-          });
+          };
+          setBookingStats(nextStats);
+          writeCachedBookingStats(nextStats);
         }
       } catch {
-        if (!cancelled)
-          setBookingStats({ uniqueClientsGuided: 0, totalBookings: 0 });
+        // Keep cached stats visible when the background refresh is unavailable.
       }
     }
 
@@ -73,6 +78,10 @@ export function About() {
       if (typeof customEvent.detail?.totalReviews === "number") {
         setReviewCount(customEvent.detail.totalReviews);
       }
+    };
+
+    const handleBookingStatsUpdate = () => {
+      refreshAll();
     };
 
     // Refresh when tab becomes visible again (user returns after booking)
@@ -90,6 +99,7 @@ export function About() {
       REVIEW_COUNT_UPDATED_EVENT,
       handleReviewCountUpdate as EventListener,
     );
+    window.addEventListener(BOOKING_STATS_UPDATED_EVENT, handleBookingStatsUpdate);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
@@ -99,6 +109,7 @@ export function About() {
         REVIEW_COUNT_UPDATED_EVENT,
         handleReviewCountUpdate as EventListener,
       );
+      window.removeEventListener(BOOKING_STATS_UPDATED_EVENT, handleBookingStatsUpdate);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);

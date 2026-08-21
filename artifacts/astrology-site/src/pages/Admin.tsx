@@ -330,7 +330,7 @@ export default function Admin() {
                 {bookings.map((booking, idx) => (
                   <tr
                     key={`${booking.id || "booking"}-${idx}`}
-                    className={`border-t border-white/5 ${booking.status === "COMPLETED" ? "line-through opacity-60" : ""}`}
+                    className={`border-t border-white/5 ${booking.status === "COMPLETED" ? "opacity-60" : ""}`}
                   >
                     <td className="px-3 py-2 text-white">
                       {(booking as any).fullName ||
@@ -428,7 +428,7 @@ export default function Admin() {
                           </button>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200">
+                            <span className="rounded bg-emerald-500/15 px-2 py-1 text-emerald-200 line-through">
                               Completed
                             </span>
                             {booking.cutThrough ? (
