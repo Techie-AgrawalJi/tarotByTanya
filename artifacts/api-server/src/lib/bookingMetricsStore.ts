@@ -7,6 +7,7 @@ import {
 } from "./mongoose";
 
 const BOOKING_COUNTER_ID = "booking-metrics";
+let cachedMetrics: BookingMetricsRecord | null = null;
 
 export type BookingMetricsRecord = {
   id: string;
@@ -60,6 +61,10 @@ function normalizeMetrics(record: any): BookingMetricsRecord {
 }
 
 async function getMetricsDocument() {
+  if (cachedMetrics) {
+    return cachedMetrics;
+  }
+
   const now = new Date();
 
   if (!process.env.MONGODB_URI) {
@@ -68,14 +73,17 @@ async function getMetricsDocument() {
       const raw = await fs.readFile(file, "utf8").catch(() => "null");
       const parsed = raw ? JSON.parse(raw) : null;
       if (parsed && parsed._id === BOOKING_COUNTER_ID) {
-        return normalizeMetrics(parsed);
+        cachedMetrics = normalizeMetrics(parsed);
+        return cachedMetrics;
       }
       const created = { _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now };
       await fs.mkdir(path.dirname(file), { recursive: true }).catch(() => {});
       await fs.writeFile(file, JSON.stringify(created, null, 2), "utf8");
-      return normalizeMetrics(created);
+      cachedMetrics = normalizeMetrics(created);
+      return cachedMetrics;
     } catch (err) {
-      return normalizeMetrics({ _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now });
+      cachedMetrics = normalizeMetrics({ _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now });
+      return cachedMetrics;
     }
   }
 
@@ -83,7 +91,8 @@ async function getMetricsDocument() {
   const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
 
   if (existing) {
-    return normalizeMetrics(existing);
+    cachedMetrics = normalizeMetrics(existing);
+    return cachedMetrics;
   }
 
   const created = await Counter.create({
@@ -94,7 +103,8 @@ async function getMetricsDocument() {
     updatedAt: now,
   });
 
-  return normalizeMetrics(created);
+  cachedMetrics = normalizeMetrics(created);
+  return cachedMetrics;
 }
 
 export async function readBookingMetrics(): Promise<BookingMetricsRecord> {
@@ -115,9 +125,11 @@ export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
       await fs.writeFile(metricsFile, JSON.stringify(reset, null, 2), "utf8");
       await fs.writeFile(markersFile, JSON.stringify([], null, 2), "utf8");
       await fs.writeFile(phonesFile, JSON.stringify([], null, 2), "utf8");
-      return normalizeMetrics(reset);
+        cachedMetrics = normalizeMetrics(reset);
+        return cachedMetrics;
     } catch (err) {
-      return normalizeMetrics({ _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now });
+        cachedMetrics = normalizeMetrics({ _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now });
+        return cachedMetrics;
     }
   }
 
@@ -139,46 +151,12 @@ export async function resetBookingMetrics(): Promise<BookingMetricsRecord> {
     updatedAt: now,
   });
 
-  return normalizeMetrics(reset);
+  cachedMetrics = normalizeMetrics(reset);
+  return cachedMetrics;
 }
 
 export async function bootstrapBookingMetrics(): Promise<BookingMetricsRecord> {
-  const now = new Date();
-
-  if (!process.env.MONGODB_URI) {
-    try {
-      const file = path.join(process.cwd(), "artifacts", "api-server", "data", "metrics.json");
-      const raw = await fs.readFile(file, "utf8").catch(() => "null");
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && parsed._id === BOOKING_COUNTER_ID) {
-        return normalizeMetrics(parsed);
-      }
-      const seeded = { _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now };
-      await fs.mkdir(path.dirname(file), { recursive: true }).catch(() => {});
-      await fs.writeFile(file, JSON.stringify(seeded, null, 2), "utf8");
-      return normalizeMetrics(seeded);
-    } catch (err) {
-      return normalizeMetrics({ _id: BOOKING_COUNTER_ID, bookingTotal: 0, uniqueClientTotal: 0, createdAt: now, updatedAt: now });
-    }
-  }
-
-  const Counter = await getBookingCounterModel();
-
-  const existing = await Counter.findOne({ _id: BOOKING_COUNTER_ID }).lean().exec();
-  if (existing) {
-    return normalizeMetrics(existing);
-  }
-
-  const seededNow = new Date();
-  const seeded = await Counter.create({
-    _id: BOOKING_COUNTER_ID,
-    bookingTotal: 0,
-    uniqueClientTotal: 0,
-    createdAt: seededNow,
-    updatedAt: seededNow,
-  });
-
-  return normalizeMetrics(seeded);
+  return getMetricsDocument();
 }
 
 // Booking confirmation logic is intentionally isolated here.
